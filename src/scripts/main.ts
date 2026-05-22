@@ -10,6 +10,7 @@ import "../css/slides.css";
 import "../css/viewer.css";
 import "../css/present.css";
 
+import DOMPurify from "dompurify";
 import { SlidesEngine } from "./SlidesEngine";
 
 const BASE_WIDTH = 1280;
@@ -18,6 +19,30 @@ const bc = new BroadcastChannel("slide_sync");
 
 const urlParams = new URLSearchParams(window.location.search);
 const isPresentMode = urlParams.get("mode") === "present";
+
+/**
+ * 受け取った HTML をセキュリティ上安全にクリーン化する
+ * @param html 挿入前のスライド HTML
+ * @returns 安全な HTML 文字列
+ */
+function sanitizeSlidesHtml(html: string): string {
+  return DOMPurify.sanitize(html, {
+    USE_PROFILES: { html: true },
+    FORBID_TAGS: [
+      "script",
+      "iframe",
+      "object",
+      "embed",
+      "link",
+      "meta",
+      "base",
+      "style",
+    ],
+    ADD_ATTR: ["data-*", "style"],
+    ALLOW_ARIA_ATTR: true,
+    ALLOW_UNKNOWN_PROTOCOLS: false,
+  });
+}
 
 /**
  * スライドアプリケーションのランタイム起動
@@ -60,7 +85,7 @@ function setupViewer(slidesHtml: string): void {
   if (!wrapper || !viewer || !zoomInput || !pageInput || !totalPagesLabel)
     return;
 
-  wrapper.innerHTML = slidesHtml;
+  wrapper.innerHTML = sanitizeSlidesHtml(slidesHtml);
   totalPagesLabel.textContent = String(
     document.querySelectorAll(".slide").length,
   );
@@ -215,7 +240,7 @@ function setupPresenter(slidesHtml: string): void {
   const fullscreenHint = document.getElementById("fullscreen-hint");
   if (!container) return;
 
-  container.innerHTML = slidesHtml;
+  container.innerHTML = sanitizeSlidesHtml(slidesHtml);
 
   function updateLayout(): void {
     const scale = Math.min(
