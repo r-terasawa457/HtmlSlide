@@ -1,0 +1,97 @@
+:root {
+  --toolbar-height: 48px;
+  --bg-color: #525659;
+  --active-blue: #4285f4;
+}
+
+/* 💡 ビューアー起動時のみ適用されるように限定化 */
+body.viewer-mode {
+  margin: 0;
+  background: var(--bg-color);
+  font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+  overflow: hidden;
+  height: 100vh;
+}
+
+/* --- ツールバー --- */
+#toolbar {
+  height: var(--toolbar-height);
+  background: #323639;
+  color: white;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 0 16px;
+  box-shadow: 0 2px 5px rgba(0, 0, 0, 0.3);
+  position: relative;
+  z-index: 100;
+}
+
+.toolbar-section {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.toolbar-item {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+
+button {
+  background: transparent;
+  border: none;
+  color: white;
+  cursor: pointer;
+  padding: 8px;
+  border-radius: 4px;
+  display: flex;
+  align-items: center;
+}
+
+button:hover {
+  background: rgba(255, 255, 255, 0.1);
+}
+
+button.active svg {
+  fill: var(--active-blue) !important;
+}
+
+button svg {
+  width: 20px;
+  height: 20px;
+  fill: white;
+  transition: fill 0.2s;
+}
+
+input {
+  background: rgba(0, 0, 0, 0.3);
+  border: 1px solid rgba(255, 255, 255, 0.2);
+  color: white;
+  text-align: center;
+  padding: 2px 4px;
+  border-radius: 2px;
+}
+
+.separator {
+  width: 1px;
+  height: 24px;
+  background: rgba(255, 255, 255, 0.2);
+  margin: 0 8px;
+}
+
+/* --- ビューアーコンテナ --- */
+#viewer-container {
+  height: calc(100vh - var(--toolbar-height));
+  overflow: auto;
+  display: flex;
+  justify-content: center;
+  align-items: flex-start;
+  scroll-behavior: smooth;
+}
+
+#slides-scale-wrapper {
+  transform-origin: top center;
+  padding: 10px 0;
+}

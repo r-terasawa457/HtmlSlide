@@ -1,0 +1,22 @@
+{
+  "name": "htmlslide",
+  "module": "index.ts",
+  "type": "module",
+  "private": true,
+  "devDependencies": {
+    "@types/bun": "latest"
+  },
+  "peerDependencies": {
+    "typescript": "^5"
+  },
+  "dependencies": {
+    "bootstrap": "^5.3.8",
+    "highlight.js": "^11.11.1",
+    "marked": "^18.0.4"
+  },
+  "scripts": {
+    "build": "bun build.js",
+    "build:watch": "bun build ./src/scripts/indexMain.js --outdir ./dist --watch",
+    "dev": "bun dev.js"
+  }
+}
