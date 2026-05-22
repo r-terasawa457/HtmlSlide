@@ -7,14 +7,17 @@ const PORT = 3000;
 const connectedSockets = new Set();
 
 // 1. 裏で自動ウォッチビルドを子プロセスとして起動（JS/CSSの自動更新）
-Bun.spawn(["bun", "build", "./src/scripts/main.js", "--outdir", "./dist", "--watch"], {
-  stdout: "inherit",
-  stderr: "inherit",
-});
+Bun.spawn(
+  ["bun", "build", "./src/scripts/main.ts", "--outdir", "./dist", "--watch"],
+  {
+    stdout: "inherit",
+    stderr: "inherit",
+  },
+);
 
 // 2. 💡 【新機能】成果物（dist）の更新を監視し、ビルド完了後にブラウザへリロード命令を出す
 watch("./dist", (eventType, filename) => {
-  if (filename && (filename.endsWith(".js") || filename.endsWith(".css"))) {
+  if (filename && (filename.endsWith(".ts") || filename.endsWith(".css"))) {
     // ビルドの書き込み完了をわずかに待ってから全ブラウザにリロードシグナルを送信
     setTimeout(() => {
       for (const ws of connectedSockets) {
@@ -36,7 +39,7 @@ watch("./static", (eventType, filename) => {
 // 4. 高性能Web ＋ WebSocket 統合サーバーの起動
 Bun.serve({
   port: PORT,
-  
+
   // WebSocketのイベントハンドリング定義
   websocket: {
     open(ws) {
@@ -45,7 +48,7 @@ Bun.serve({
     close(ws) {
       connectedSockets.delete(ws);
     },
-    message(ws, message) {}
+    message(ws, message) {},
   },
 
   async fetch(req, server) {
@@ -82,7 +85,9 @@ Bun.serve({
         `;
         // HTMLの </body> タグの直前にスクリプトを滑り込ませる
         htmlText = htmlText.replace("</body>", `${clientScript}</body>`);
-        return new Response(htmlText, { headers: { "Content-Type": "text/html" } });
+        return new Response(htmlText, {
+          headers: { "Content-Type": "text/html" },
+        });
       }
     }
 
@@ -94,7 +99,9 @@ Bun.serve({
     if (await file.exists()) return new Response(file);
 
     return new Response("Not Found", { status: 404 });
-  }
+  },
 });
 
-console.log(`\x1b[36m[Bun Server]\x1b[0m Running at \x1b[4mhttp://localhost:${PORT}\x1b[0m (Live Reload: \x1b[32mActive ✨\x1b[0m)`);
+console.log(
+  `\x1b[36m[Bun Server]\x1b[0m Running at \x1b[4mhttp://localhost:${PORT}\x1b[0m (Live Reload: \x1b[32mActive ✨\x1b[0m)`,
+);
