@@ -10,11 +10,16 @@
     "typescript": "^5"
   },
   "dependencies": {
+    "@types/mathjax": "^0.0.40",
     "bootstrap": "^5.3.8",
     "dompurify": "^3.0.8",
     "highlight.js": "^11.11.1",
-    "marked": "^18.0.4"
+    "marked": "^18.0.4",
+    "mathjax": "^4.1.2"
   },
+  "include": [
+    "src/scripts/env.d.ts"
+  ],
   "scripts": {
     "build": "bun build.js",
     "build:watch": "bun build ./src/scripts/indexMain.js --outdir ./dist --watch",

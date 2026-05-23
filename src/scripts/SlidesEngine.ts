@@ -7,10 +7,13 @@ import { marked } from "marked";
 import type { Token } from "marked";
 import hljs from "highlight.js";
 import { createMarkedColonPlugin } from "./plugins/marked/MarkedColonExtensions";
+import { createMarkedMathJaxPlugin } from "./plugins/marked/MarkedMathJaxExtension";
+
 import { createMarkedImageAttributesPlugin } from "./plugins/marked/MarkedImageAttributesExtension";
 import { createMarkedVariablesPlugin } from "./plugins/marked/MarkedVariablesPlugin";
 
 marked.use(createMarkedColonPlugin());
+marked.use(createMarkedMathJaxPlugin());
 marked.use(createMarkedImageAttributesPlugin());
 marked.use({
   renderer: {
