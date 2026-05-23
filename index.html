@@ -7,6 +7,9 @@
     <script src="/dist/main.js" defer></script>
     <script>
       MathJax = {
+        sre: {
+          worker: false,
+        },
         loader: {
           load: ["input/tex-base", "output/chtml", "ui/menu", "[tex]/require"],
         },
@@ -24,8 +27,8 @@
       };
     </script>
     <script
-      defer
       src="https://cdn.jsdelivr.net/npm/mathjax@4/startup.js"
+      defer
     ></script>
   </head>
   <body>
