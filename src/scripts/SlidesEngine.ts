@@ -215,7 +215,7 @@ function resolveVariableValue(
 
 function replaceVariablesInString(value: any, context: VariableContext): any {
   if (typeof value !== "string") return value;
-  return value.replace(/\$\{([a-zA-Z0-9._-]+)\}/g, (match, varPath) => {
+  return value.replace(/{%\s*([a-zA-Z0-9._-]+)\s*%}/g, (match, varPath) => {
     const resolved = resolveVariableValue(varPath, context);
     return resolved !== null ? resolved : match;
   });

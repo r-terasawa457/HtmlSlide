@@ -8,7 +8,7 @@ Bun.spawn(
   [
     "bun",
     "build",
-    "./src/scripts/main.js",
+    "./src/scripts/main.ts",
     "--outdir",
     "./dist",
     "--watch",

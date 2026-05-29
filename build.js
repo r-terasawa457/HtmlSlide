@@ -5,7 +5,7 @@ console.log(
 );
 
 const result = await Bun.build({
-  entrypoints: ["./src/scripts/main.js"],
+  entrypoints: ["./src/scripts/main.ts"],
   outdir: "./dist",
   minify: true,
   target: "browser",
