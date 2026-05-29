@@ -36,7 +36,7 @@ function sanitizeSlidesHtml(html: string): string {
       "link",
       "meta",
       "base",
-      "style",
+      // "style",
     ],
     ADD_ATTR: ["data-*", "style"],
     ALLOW_ARIA_ATTR: true,

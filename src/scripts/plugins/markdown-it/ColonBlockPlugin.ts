@@ -1,21 +1,21 @@
 import MarkdownIt from "markdown-it";
 import StateBlock from "markdown-it/lib/rules_block/state_block.mjs";
 
-export interface CustomBlockOptions {
+export interface colonBlockOptions {
   marker?: string;
   mode?: "indent" | "colon" | "hybrid";
-  minMarkerLength?: number;
 }
 
-export default function customBlockPlugin(
+export default function colonBlockPlugin(
   md: MarkdownIt,
-  options: CustomBlockOptions = {},
+  options: colonBlockOptions = {},
 ) {
   const markerChar = options.marker || ":";
-  const mode = options.mode || "indent";
-  const minLength = options.minMarkerLength || 3;
+  const mode = options.mode || "colon";
+  const minLength = 3;
 
   function getMarkerCount(state: StateBlock, line: number): number {
+    //TODO : 存在意義不明
     const bMark = state.bMarks[line] ?? 0;
     const tShift = state.tShift[line] ?? 0;
     const eMark = state.eMarks[line] ?? 0;
@@ -27,7 +27,7 @@ export default function customBlockPlugin(
     return count >= minLength ? count : 0;
   }
 
-  function customBlockRule(
+  function colonBlockRule(
     state: StateBlock,
     startLine: number,
     endLine: number,
@@ -57,20 +57,29 @@ export default function customBlockPlugin(
         if (
           !inQuotes &&
           char === markerChar &&
-          lineText[i + 1] === markerChar
+          lineText[i + 1] === markerChar &&
+          lineText[i + 2] !== markerChar
         ) {
-          if (lineText[i + 2] !== markerChar) {
-            trueCloseIdx = i;
-            break;
-          }
+          trueCloseIdx = i;
+          break;
         }
       }
       if (trueCloseIdx !== -1) {
         if (silent) return true;
-        const attrPart = lineText.slice(2, trueCloseIdx).trim();
+        let tagNameEndIdx = 2;
+        let tagName = "div";
+        if (lineText.length > 2 && lineText[2] !== " ") {
+          tagNameEndIdx = lineText.slice(0, trueCloseIdx).indexOf(" ");
+          if (tagNameEndIdx === -1) {
+            tagNameEndIdx = trueCloseIdx;
+          }
+          tagName = lineText.slice(2, tagNameEndIdx);
+        }
+        //TODO : 属性のパースをもっとちゃんとやる（クォート内スペースとかも考慮する）
+        const attrPart = lineText.slice(tagNameEndIdx, trueCloseIdx).trim();
         const inlineContent = lineText.slice(trueCloseIdx + 2).trim();
 
-        const tokenOpen = state.push("custom_block_open", "div", 1);
+        const tokenOpen = state.push("colon_block_open", tagName, 1);
         tokenOpen.markup = markerChar.repeat(2);
         tokenOpen.map = [startLine, startLine + 1];
         if (attrPart) tokenOpen.attrSet("data-attr", attrPart);
@@ -80,7 +89,7 @@ export default function customBlockPlugin(
         tokenInline.map = [startLine, startLine + 1];
         tokenInline.children = [];
 
-        const tokenClose = state.push("custom_block_close", "div", -1);
+        const tokenClose = state.push("colon_block_close", tagName, -1);
         tokenClose.markup = markerChar.repeat(2);
 
         state.line = startLine + 1;
@@ -95,11 +104,22 @@ export default function customBlockPlugin(
     if (startMarkerCount === 0) return false;
     if (silent) return true;
 
-    const rawContent = state.src.slice(pos + startMarkerCount, eMark).trim();
-    const tokenOpen = state.push("custom_block_open", "div", 1);
+    const rawContent = state.src.slice(pos + startMarkerCount, eMark);
+    let tagName = "div";
+    let tagNameLength = 1;
+    if (rawContent[0] !== " ") {
+      console.log("rawContent:", rawContent);
+      tagNameLength =
+        rawContent.indexOf(" ") !== -1
+          ? rawContent.indexOf(" ")
+          : rawContent.length;
+      tagName = rawContent.slice(0, tagNameLength);
+    }
+    const tokenOpen = state.push("colon_block_open", tagName, 1);
     tokenOpen.markup = markerChar.repeat(startMarkerCount);
     tokenOpen.map = [startLine, 0];
-    if (rawContent) tokenOpen.attrSet("data-meta", rawContent);
+    if (rawContent)
+      tokenOpen.attrSet("data-meta", rawContent.slice(tagNameLength).trim());
 
     // ==========================================
     // 3. 下方向への行スキャン（終了条件の判定）
@@ -173,7 +193,7 @@ export default function customBlockPlugin(
     // ==========================================
     // 5. 終了タグの処理と、次行へのポインタ遷移
     // ==========================================
-    const tokenClose = state.push("custom_block_close", "div", -1);
+    const tokenClose = state.push("colon_block_close", tagName, -1);
     tokenClose.markup = markerChar.repeat(startMarkerCount);
 
     if (tokenOpen.map) {
@@ -184,7 +204,7 @@ export default function customBlockPlugin(
     return true;
   }
 
-  md.block.ruler.before("paragraph", "custom_block", customBlockRule, {
+  md.block.ruler.before("paragraph", "colon_block", colonBlockRule, {
     alt: ["paragraph", "reference", "blockquote", "list"],
   });
 }

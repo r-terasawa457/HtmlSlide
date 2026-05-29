@@ -11,10 +11,11 @@ const testMarkdown = `
 
 1行ブロックのテスト（属性内にコロンやクォートを含む）：
 ::note class="box" style="color: #222222;":: ここはインライン本文です。**太字**もOK。
+::note2:: ここは別のインライン本文。クォートとコロンを属性に含むテスト。
 
 複数行ブロックのテスト（インデント戻り検知）：
 :::: flex id="main-flex"
-    ::: col-7
+    :::flex col-7
     ## 左カラム
     ここは左の中身です。
     
@@ -39,7 +40,7 @@ const testMarkdownColon = `
 
 ::::: main-wrapper
 :::: flex
-::: col-12
+:::flex col-12
 左寄せだけどコロンの数で親子を判定するテスト。
 :::
 ::::
