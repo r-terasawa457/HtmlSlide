@@ -41,8 +41,6 @@ export function createMarkedMathJaxPlugin(): MarkedExtension {
       return match ? (match.index ?? -1) : -1;
     },
     tokenizer(this: TokenizerThis, src: string): MathBlockToken | undefined {
-      const match = src.match(/^(\s*)\$\delta(?: \n|$)/);
-      // 💡 文字列リテラル内のエスケープを考慮した正規表現ガード
       const validMatch = src.match(/^(\s*)\$\$(?:\n|$)/);
       if (!validMatch) return;
 
@@ -102,7 +100,8 @@ export function createMarkedMathJaxPlugin(): MarkedExtension {
       return match ? (match.index ?? -1) : -1;
     },
     tokenizer(this: TokenizerThis, src: string): MathInlineToken | undefined {
-      const match = src.match(/^\$((?:\\\$|[^\$\n])+?)\$/);
+      // 💡 否定先読み (?!\{) を追加： $ の後ろが { の場合はカスタム変数とみなして数式パースをスキップ
+      const match = src.match(/^\$(?!\{)((?:\\\$|[^\$\n])+?)\$/);
       if (!match || match[1] === undefined) return;
 
       return {
