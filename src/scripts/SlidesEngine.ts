@@ -1,5 +1,6 @@
 import MarkdownIt from "markdown-it";
 import hljs from "highlight.js";
+import mathjax3 from "markdown-it-mathjax3";
 import ColonBlockPlugin from "./plugins/markdown-it/ColonBlockPlugin";
 import SectionBlockPlugin from "./plugins/markdown-it/HrSectionPlugin";
 
@@ -28,6 +29,7 @@ const mdMeta = new MarkdownIt({
   typographer: true,
 });
 mdMeta.use(ColonBlockPlugin);
+mdMeta.use(mathjax3);
 
 function parseAttributes(
   str: string | null | undefined,
@@ -122,18 +124,32 @@ function setNestedVariable(
   path: string[],
   value: any,
 ): void {
-  let current = target;
+  let current: Record<string, any> = target;
+
   for (let i = 0; i < path.length - 1; i += 1) {
     const key = path[i];
+    if (key === undefined) continue;
+
     if (
       !Object.prototype.hasOwnProperty.call(current, key) ||
-      typeof current[key] !== "object"
+      typeof current[key] !== "object" ||
+      current[key] === null
     ) {
       current[key] = {};
     }
-    current = current[key];
+
+    const next: unknown = current[key];
+    if (next && typeof next === "object") {
+      current = next as Record<string, any>;
+    } else {
+      return;
+    }
   }
-  current[path[path.length - 1]] = value;
+
+  const lastKey = path[path.length - 1];
+  if (lastKey !== undefined) {
+    current[lastKey] = value;
+  }
 }
 
 function stringifyVariableValue(value: any): string | null {
@@ -176,7 +192,12 @@ function resolveVariableValue(
     const path = pathStr.slice(5).split(".");
     let current: any = meta;
     for (const segment of path) {
-      if (current == null || typeof current !== "object") return null;
+      if (
+        segment === undefined ||
+        current == null ||
+        typeof current !== "object"
+      )
+        return null;
       current = current[segment];
     }
     return stringifyVariableValue(current);
@@ -185,7 +206,8 @@ function resolveVariableValue(
   const path = pathStr.split(".");
   let current: any = meta.variables;
   for (const segment of path) {
-    if (current == null || typeof current !== "object") return null;
+    if (segment === undefined || current == null || typeof current !== "object")
+      return null;
     current = current[segment];
   }
   return stringifyVariableValue(current);
@@ -217,7 +239,7 @@ function replaceVariablesInToken(
     if (replaced !== token.content) {
       token.content = replaced;
       const parsed = md.parseInline(replaced, {});
-      const inlineToken = parsed.find((t) => t.type === "inline");
+      const inlineToken = parsed.find((t: any) => t.type === "inline");
       if (inlineToken && Array.isArray(inlineToken.children)) {
         token.children = inlineToken.children;
       }
@@ -248,6 +270,7 @@ function parseMetaSection(metaText: string): MetaData {
   function renderTokenRange(token: any): string {
     if (!token || !token.map) return "";
     const [start, end] = token.map;
+    if (start === undefined || end === undefined) return "";
     return mdMeta.render(lines.slice(start, end).join("\n")).trim();
   }
 
@@ -271,17 +294,19 @@ function parseMetaSection(metaText: string): MetaData {
       }
 
       const parent = stack[stack.length - 1];
-      if (
-        parent.type === "header" ||
-        parent.type === "footer" ||
-        parent.type === "title"
-      ) {
-        stack.push({ type: "other" });
-        continue;
-      }
-      if (parent.type === "variables") {
-        stack.push({ type: "variables", path: [...parent.path, token.tag] });
-        continue;
+      if (parent) {
+        if (
+          parent.type === "header" ||
+          parent.type === "footer" ||
+          parent.type === "title"
+        ) {
+          stack.push({ type: "other" });
+          continue;
+        }
+        if (parent.type === "variables") {
+          stack.push({ type: "variables", path: [...parent.path, token.tag] });
+          continue;
+        }
       }
       stack.push({ type: "other" });
       continue;
@@ -354,7 +379,8 @@ function splitMetaSection(markdownText: string): {
   let separatorIndex = -1;
 
   for (let i = 0; i < lines.length; i += 1) {
-    if (/^\s*([-*_])(?:\s*\1){2,}\s*$/.test(lines[i])) {
+    const line = lines[i];
+    if (line && /^\s*([-*_])(?:\s*\1){2,}\s*$/.test(line)) {
       separatorIndex = i;
       break;
     }
@@ -384,7 +410,7 @@ function sectionHasExplicitHeaderFooter(section: any): {
 
   return section.tokens.reduce(
     (acc: { header: boolean; footer: boolean }, token: any) => {
-      if (token.level !== 0) return acc;
+      if (!token || token.level !== 0) return acc;
       if (token.type === "html_block" || token.type === "html_inline") {
         const tagName = normalizeHtmlTagName(token.content);
         if (tagName === "header") acc.header = true;
@@ -418,6 +444,7 @@ export const SlidesEngine = {
     const md = new MarkdownIt({ html: true, linkify: true, typographer: true });
 
     md.use(ColonBlockPlugin);
+    md.use(mathjax3);
     md.use(SectionBlockPlugin, {
       add_section_id: "slide",
       add_classes: ["page"],
@@ -465,15 +492,17 @@ export const SlidesEngine = {
 
             for (let i = 0; i < tokens.length; i++) {
               const t = tokens[i];
-              if (t.level !== 0) continue;
+              if (!t || t.level !== 0) continue;
 
               if (t.type === "colon_block_open" && t.tag === "header") {
                 headerOpenIdx = i;
                 for (let j = i + 1; j < tokens.length; j++) {
+                  const tj = tokens[j];
                   if (
-                    tokens[j].level === 0 &&
-                    tokens[j].type === "colon_block_close" &&
-                    tokens[j].tag === "header"
+                    tj &&
+                    tj.level === 0 &&
+                    tj.type === "colon_block_close" &&
+                    tj.tag === "header"
                   ) {
                     headerCloseIdx = j;
                     break;
@@ -505,15 +534,17 @@ export const SlidesEngine = {
 
             for (let i = tokens.length - 1; i >= 0; i--) {
               const t = tokens[i];
-              if (t.level !== 0) continue;
+              if (!t || t.level !== 0) continue;
 
               if (t.type === "colon_block_close" && t.tag === "footer") {
                 footerCloseIdx = i;
                 for (let j = i - 1; j >= 0; j--) {
+                  const tj = tokens[j];
                   if (
-                    tokens[j].level === 0 &&
-                    tokens[j].type === "colon_block_open" &&
-                    tokens[j].tag === "footer"
+                    tj &&
+                    tj.level === 0 &&
+                    tj.type === "colon_block_open" &&
+                    tj.tag === "footer"
                   ) {
                     footerOpenIdx = j;
                     break;
@@ -584,6 +615,7 @@ export const SlidesEngine = {
 
     md.renderer.rules.fence = (tokens, idx) => {
       const token = tokens[idx];
+      if (!token) return "";
       const info = token.info ? token.info.trim() : "";
       const lang = info.split(/\s+/)[0] || "";
       const language = hljs.getLanguage(lang) ? lang : "plaintext";
@@ -593,6 +625,7 @@ export const SlidesEngine = {
 
     md.renderer.rules.code_block = (tokens, idx) => {
       const token = tokens[idx];
+      if (!token) return "";
       const highlighted = hljs.highlight(token.content, {
         language: "plaintext",
       }).value;
@@ -601,6 +634,7 @@ export const SlidesEngine = {
 
     md.renderer.rules.image = (tokens, idx) => {
       const token = tokens[idx];
+      if (!token) return "";
       const src = token.attrGet("src") || "";
       const title = token.attrGet("title") || "";
       const rawAlt = renderTokenChildrenContent(token).trim();

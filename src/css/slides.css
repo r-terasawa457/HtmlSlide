@@ -126,6 +126,18 @@ p {
   border-radius: 4px;
 }
 
+mjx-container {
+  display: inline-block;
+  margin: 0 0.25em;
+  vertical-align: middle;
+}
+
+mjx-container[display="true"] {
+  display: block;
+  text-align: center;
+  margin: 1em 0;
+}
+
 /* ============================================================
        bootstrap用の設定
        ============================================================ */
