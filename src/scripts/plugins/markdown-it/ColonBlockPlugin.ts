@@ -1,10 +1,10 @@
-import type MarkdownIt from 'markdown-it';
-import StateBlock from 'markdown-it/lib/rules_block/state_block.mjs';
+import type MarkdownIt from "markdown-it";
+import StateBlock from "markdown-it/lib/rules_block/state_block.mjs";
 
-const marker_char = ':'.charCodeAt(0);
+const marker_char = ":".charCodeAt(0);
 const marker_one_line = 2;
 const marker_min_block = 3;
-const defaultAttrName = 'class';
+const defaultAttrName = "class";
 const validTagRegex = /^[a-zA-Z][a-zA-Z0-9-]*$/;
 
 /**
@@ -23,7 +23,7 @@ function parseAttrs(attrsStr: string): [string, string][] {
   for (const match of matches) {
     if (match[1] !== undefined && match[2] !== undefined) {
       const key = match[1];
-      const value = match[2].replace(/\\"/g, '"').replace(/\\\\/g, '\\');
+      const value = match[2].replace(/\\"/g, '"').replace(/\\\\/g, "\\");
 
       if (key === defaultAttrName) {
         defaultAttrValues.push(...value.split(/\s+/));
@@ -36,7 +36,7 @@ function parseAttrs(attrsStr: string): [string, string][] {
   }
 
   if (defaultAttrValues.length > 0) {
-    attrs.unshift([defaultAttrName, defaultAttrValues.join(' ')]);
+    attrs.unshift([defaultAttrName, defaultAttrValues.join(" ")]);
   }
 
   return attrs;
@@ -48,11 +48,11 @@ function parseAttrs(attrsStr: string): [string, string][] {
  * * @param md - The MarkdownIt parser instance.
  */
 export default function ColonBlockPlugin(md: MarkdownIt): void {
-  md.block.ruler.before('fence', 'colon_block', ColonBlock);
+  md.block.ruler.before("fence", "colon_block", ColonBlock);
 
   md.renderer.rules.colon_block_open = (tokens, idx, options, env, self) => {
     const token = tokens[idx];
-    const tagName = token.tag || 'div';
+    const tagName = token.tag || "div";
 
     const attrsStr = self.renderAttrs(token);
     return `<${tagName}${attrsStr}>`;
@@ -60,13 +60,18 @@ export default function ColonBlockPlugin(md: MarkdownIt): void {
 
   md.renderer.rules.colon_block_close = (tokens, idx, options, env, self) => {
     const token = tokens[idx];
-    const tagName = token.tag || 'div';
+    const tagName = token.tag || "div";
 
     return `</${tagName}>\n`;
   };
 }
 
-function ColonBlock(state: StateBlock, startLine: number, endLine: number, silent: boolean): boolean {
+function ColonBlock(
+  state: StateBlock,
+  startLine: number,
+  endLine: number,
+  silent: boolean,
+): boolean {
   let pos = state.bMarks[startLine] + state.tShift[startLine];
   let max = state.eMarks[startLine];
 
@@ -97,7 +102,7 @@ function ColonBlock(state: StateBlock, startLine: number, endLine: number, silen
     let inQuotes = false;
 
     for (let i = 0; i < lineText.length; i++) {
-      if (lineText[i] === '\\' && inQuotes) {
+      if (lineText[i] === "\\" && inQuotes) {
         i++;
         continue;
       }
@@ -106,7 +111,7 @@ function ColonBlock(state: StateBlock, startLine: number, endLine: number, silen
         inQuotes = !inQuotes;
         continue;
       }
-      if (!inQuotes && lineText.slice(i, i + 2) === '::') {
+      if (!inQuotes && lineText.slice(i, i + 2) === "::") {
         closeIdx = i;
         break;
       }
@@ -115,13 +120,13 @@ function ColonBlock(state: StateBlock, startLine: number, endLine: number, silen
       return false;
     }
 
-    let tagName = 'div';
-    let attrs = '';
+    let tagName = "div";
+    let attrs = "";
 
     let idx = 0;
     mem = idx;
 
-    idx = lineText.slice(0, closeIdx).indexOf(' ', idx);
+    idx = lineText.slice(0, closeIdx).indexOf(" ", idx);
     idx = idx === -1 ? closeIdx : idx;
     if (idx - mem > 0) {
       const TagName0 = lineText.slice(mem, idx);
@@ -141,19 +146,19 @@ function ColonBlock(state: StateBlock, startLine: number, endLine: number, silen
 
     state.line = startLine + 1;
 
-    const token_o = state.push('colon_block_open', tagName, 1);
-    token_o.markup = '::';
+    const token_o = state.push("colon_block_open", tagName, 1);
+    token_o.markup = "::";
     token_o.info = attrs;
     token_o.map = [startLine, state.line];
     token_o.attrs = parseAttrs(attrs);
 
-    const token_i = state.push('inline', '', 0);
+    const token_i = state.push("inline", "", 0);
     token_i.content = lineText.slice(closeIdx + 2).trimStart();
     token_i.map = [startLine, state.line];
     token_i.children = [];
 
-    const token_c = state.push('colon_block_close', tagName, -1);
-    token_c.markup = '::';
+    const token_c = state.push("colon_block_close", tagName, -1);
+    token_c.markup = "::";
 
     return true;
   } else if (marker_len < marker_min_block) {
@@ -169,13 +174,13 @@ function ColonBlock(state: StateBlock, startLine: number, endLine: number, silen
 
   const lineText = state.src.slice(pos, max);
 
-  let tagName = 'div';
-  let attrs = '';
+  let tagName = "div";
+  let attrs = "";
   let idx = 0;
   mem = idx;
   let lmax = max - pos;
 
-  idx = lineText.indexOf(' ', idx);
+  idx = lineText.indexOf(" ", idx);
   idx = idx === -1 ? lmax : idx;
   if (idx - mem > 0) {
     const TagName0 = lineText.slice(mem, idx);
@@ -212,10 +217,10 @@ function ColonBlock(state: StateBlock, startLine: number, endLine: number, silen
       break;
     }
 
-//     // Skip nested content lines that are deeper than the block indent
-//     if (pos < max && state.sCount[nextLine] > sCount) {
-//       continue;
-//     }
+    //     // Skip nested content lines that are deeper than the block indent
+    //     if (pos < max && state.sCount[nextLine] > sCount) {
+    //       continue;
+    //     }
 
     if (state.src.charCodeAt(pos) !== marker_char) {
       continue;
@@ -250,12 +255,12 @@ function ColonBlock(state: StateBlock, startLine: number, endLine: number, silen
   const old_parent = state.parentType;
   const old_line_max = state.lineMax;
 
-  state.parentType = 'container';
+  state.parentType = "container";
   // Restrict the inner tokenizer from parsing past the closing line of this container
   state.lineMax = nextLine;
 
-  const token_o = state.push('colon_block_open', tagName, 1);
-  token_o.markup = ':'.repeat(marker_len);
+  const token_o = state.push("colon_block_open", tagName, 1);
+  token_o.markup = ":".repeat(marker_len);
   token_o.block = true;
   token_o.info = attrs;
   token_o.map = [startLine, nextLine];
@@ -264,8 +269,8 @@ function ColonBlock(state: StateBlock, startLine: number, endLine: number, silen
   // Recursively tokenize the nested block content
   state.md.block.tokenize(state, startLine + 1, nextLine);
 
-  const token_c = state.push('colon_block_close', tagName, -1);
-  token_c.markup = ':'.repeat(cmarker_len);
+  const token_c = state.push("colon_block_close", tagName, -1);
+  token_c.markup = ":".repeat(cmarker_len);
   token_c.block = true;
 
   state.parentType = old_parent;

@@ -3,6 +3,8 @@ import { watch } from "fs";
 
 const PORT = 3000;
 const connectedSockets = new Set();
+const LOG_FILE_PATH = "./dist/browser-errors.log";
+const CODE_FILE_PATH = "./dist/main.js";
 
 Bun.spawn(
   [
@@ -25,7 +27,7 @@ watch("./dist", (eventType, filename) => {
   if (filename && (filename.endsWith(".js") || filename.endsWith(".css"))) {
     setTimeout(() => {
       for (const ws of connectedSockets) {
-        ws.send("reload");
+        ws.send(JSON.stringify({ type: "reload" }));
       }
     }, 50);
   }
@@ -34,7 +36,7 @@ watch("./dist", (eventType, filename) => {
 watch("./static", (eventType, filename) => {
   if (filename === "slides.md") {
     for (const ws of connectedSockets) {
-      ws.send("reload");
+      ws.send(JSON.stringify({ type: "reload" }));
     }
   }
 });
@@ -67,16 +69,55 @@ Bun.serve({
       const file = Bun.file("./index.html");
       if (await file.exists()) {
         let htmlText = await file.text();
+
         const clientScript = `
           <script>
             (function() {
               const ws = new WebSocket('ws://' + window.location.host + '/_live_reload');
+              
               ws.onmessage = (e) => {
-                if (e.data === 'reload') {
-                  console.log('[Live Reload] 変更を検知しました。画面を再読み込みします...');
-                  window.location.reload();
+                try {
+                  const payload = JSON.parse(e.data);
+                  if (payload.type === 'reload') {
+                    console.log('[Live Reload] 変更を検知しました。画面を再読み込みします...');
+                    window.location.reload();
+                  }
+                } catch(err) {}
+              };
+
+              function sendErrorToServer(message, source, lineno, colno, error) {
+                if (ws.readyState === WebSocket.OPEN) {
+                  const logPayload = {
+                    message: message || '',
+                    source: source || '',
+                    lineno: lineno || 0,
+                    colno: colno || 0,
+                    stack: error ? error.stack : ''
+                  };
+                  ws.send(JSON.stringify({ type: 'error_log', data: logPayload }));
+                }
+              }
+
+              window.onerror = function(message, source, lineno, colno, error) {
+                sendErrorToServer(message, source, lineno, colno, error);
+                return false;
+              };
+
+              window.addEventListener('error', function(event) {
+                if (event.target && event.target !== window) {
+                  const source = event.target.src || event.target.href || event.target.tagName;
+                  sendErrorToServer('Resource Load Failed (404 or Network Error)', source, 0, 0, null);
+                }
+              }, true);
+
+              const originalConsoleError = console.error;
+              console.error = function(...args) {
+                originalConsoleError.apply(console, args);
+                if (ws.readyState === WebSocket.OPEN) {
+                  sendErrorToServer(args.join(' '), 'console.error', 0, 0, null);
                 }
               };
+
               ws.onclose = () => console.log('[Live Reload] サーバーとの接続が切断されました。');
             })();
           </script>
