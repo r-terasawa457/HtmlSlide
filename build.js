@@ -39,6 +39,26 @@ try {
   const sourceHtml = await Bun.file("./index.html").text();
   const presenterTemplate = await Bun.file("./src/presenter.html").text();
 
+  // 2.5. slides.cssの@import依存を静的ファイル内容で完全埋め込み
+  let slidesCss = await Bun.file("./src/css/slides.css").text();
+  const bootstrapCss = await Bun.file("./static/bootstrap.min.css").text();
+  const vsCss = await Bun.file("./static/vs.css").text();
+
+  slidesCss = slidesCss
+    .replace(/@import\s+['"]\/bootstrap\.min\.css['"];?/gi, () => bootstrapCss)
+    .replace(/@import\s+['"]\/vs\.css['"];?/gi, () => vsCss);
+
+  // compiledMainJsのプレースホルダーをインライン展開されたslidesCssに置換
+  const escapedSlidesCss = slidesCss
+    .replace(/\\/g, "\\\\")
+    .replace(/"/g, '\\"')
+    .replace(/\r?\n/g, "\\n");
+
+  compiledMainJs = compiledMainJs.replace(
+    "__SLIDES_CSS_PLACEHOLDER__",
+    () => escapedSlidesCss,
+  );
+
   // 3. presenter.html の組み立て（CSSとJSの完全内包化）
   const bundledPresenterHtml = presenterTemplate
     .replace("/* BUILD_INJECT_STYLES */", () => compiledCss)
