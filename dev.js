@@ -3,14 +3,18 @@ import { watch } from "fs";
 
 const PORT = 3000;
 const connectedSockets = new Set();
-const LOG_FILE_PATH = "./dist/browser-errors.log";
-const CODE_FILE_PATH = "./dist/main.js";
 
+console.log(
+  "\x1b[36m[Bun Server]\x1b[0m Running in professional dev server mode...",
+);
+
+// 1. main.ts と presenter.ts の双方を並行してwatch監視コンパイル起動
 Bun.spawn(
   [
     "bun",
     "build",
     "./src/scripts/main.ts",
+    "./src/scripts/presenter.ts",
     "--outdir",
     "./dist",
     "--watch",
@@ -74,62 +78,63 @@ Bun.serve({
           <script>
             (function() {
               const ws = new WebSocket('ws://' + window.location.host + '/_live_reload');
-              
               ws.onmessage = (e) => {
                 try {
                   const payload = JSON.parse(e.data);
-                  if (payload.type === 'reload') {
-                    console.log('[Live Reload] 変更を検知しました。画面を再読み込みします...');
-                    window.location.reload();
-                  }
+                  if (payload.type === 'reload') window.location.reload();
                 } catch(err) {}
               };
-
-              function sendErrorToServer(message, source, lineno, colno, error) {
-                if (ws.readyState === WebSocket.OPEN) {
-                  const logPayload = {
-                    message: message || '',
-                    source: source || '',
-                    lineno: lineno || 0,
-                    colno: colno || 0,
-                    stack: error ? error.stack : ''
-                  };
-                  ws.send(JSON.stringify({ type: 'error_log', data: logPayload }));
-                }
-              }
-
-              window.onerror = function(message, source, lineno, colno, error) {
-                sendErrorToServer(message, source, lineno, colno, error);
-                return false;
-              };
-
-              window.addEventListener('error', function(event) {
-                if (event.target && event.target !== window) {
-                  const source = event.target.src || event.target.href || event.target.tagName;
-                  sendErrorToServer('Resource Load Failed (404 or Network Error)', source, 0, 0, null);
-                }
-              }, true);
-
-              const originalConsoleError = console.error;
-              console.error = function(...args) {
-                originalConsoleError.apply(console, args);
-                if (ws.readyState === WebSocket.OPEN) {
-                  sendErrorToServer(args.join(' '), 'console.error', 0, 0, null);
-                }
-              };
-
-              ws.onclose = () => console.log('[Live Reload] サーバーとの接続が切断されました。');
             })();
           </script>
         `;
         htmlText = htmlText.replace("</body>", `${clientScript}</body>`);
-        // mathxyjax3の読み込みに備え、開発時も type="module" が適用されるようにする
         htmlText = htmlText.replace(
-          /<script([^>]*src=["']\/dist\/indexMain\.js["'])/i,
+          /<script([^>]*src=["']\/dist\/main\.js["'])/i,
           '<script type="module"$1',
         );
         return new Response(htmlText, {
           headers: { "Content-Type": "text/html" },
+        });
+      }
+    }
+
+    // 💡 開発時における分離型デバッグ運用の肝
+    // 開発サーバーから配信される main.js のみ、「DEV_HTML:」というマーカーと共に、
+    // インライン化を行わない分離参照用のクリーンなHTMLストリームをプレースホルダーへ注入します。
+    // 💡 開発時における分離型デバッグ運用の肝
+    if (pathname === "/dist/main.js") {
+      const file = Bun.file("./dist/main.js");
+      if (await file.exists()) {
+        let jsText = await file.text();
+
+        const devPresenterHtml = `DEV_HTML:<!DOCTYPE html>
+<html lang="ja">
+<head>
+  <meta charset="UTF-8" />
+  <title>Dynamic Slide System [プレゼンター]</title>
+  <link rel="stylesheet" href="/dist/main.css" />
+</head>
+<body class="present-mode">
+  <div id="present-container">
+    <iframe id="present-iframe" style="width: 100%; height: 100%; border: none; overflow: hidden" scrolling="no"></iframe>
+  </div>
+  <div id="fullscreen-hint">全画面表示 (F11)</div>
+  <script type="module" src="/dist/presenter.js"></script>
+</body>
+</html>`;
+
+        jsText = jsText.replace("__PRESENTER_DATA_PLACEHOLDER__", () => {
+          // 💡 複雑な箇所への補足:
+          // main.ts 側のダブルクォーテーション表現を破壊しないよう、
+          // 内部のダブルクォーテーションと生の改行コードを確実にエスケープ文字列へ置換します。
+          return devPresenterHtml
+            .replace(/\\/g, "\\\\")
+            .replace(/"/g, '\\"')
+            .replace(/\r?\n/g, "\\n");
+        });
+
+        return new Response(jsText, {
+          headers: { "Content-Type": "application/javascript" },
         });
       }
     }
@@ -145,5 +150,5 @@ Bun.serve({
 });
 
 console.log(
-  `\x1b[36m[Bun Server]\x1b[0m Running at \x1b[4mhttp://localhost:${PORT}\x1b[0m (Live Reload: \x1b[32mActive ✨\x1b[0m)`,
+  `\x1b[36m[Bun Server]\x1b[0m Running at \x1b[4mhttp://localhost:${PORT}\x1b[0m (Live Reload: Active)`,
 );

@@ -427,7 +427,15 @@ function sectionHasExplicitHeaderFooter(section: any): {
 }
 
 export const SlidesEngine = {
-  run(markdownText: string): SlidesEngineResult {
+  /**
+   * Markdownテキストを解析し、画像アセットをBase64埋め込みしたスライド用HTMLを生成する
+   * @param markdownText 解析対象のMarkdown文字列
+   * @param assets 小文字化された相対パスをキーに持つBase64データURLのマッピングオブジェクト
+   */
+  run(
+    markdownText: string,
+    assets: Record<string, string> = {},
+  ): SlidesEngineResult {
     if (!markdownText) {
       return {
         html: '<div class="slides"></div>',
@@ -635,16 +643,34 @@ export const SlidesEngine = {
     md.renderer.rules.image = (tokens, idx) => {
       const token = tokens[idx];
       if (!token) return "";
-      const src = token.attrGet("src") || "";
+
+      let src = token.attrGet("src") || "";
       const title = token.attrGet("title") || "";
       const rawAlt = renderTokenChildrenContent(token).trim();
       const rawAttrStr = `${rawAlt} img-fluid`.trim();
       const attrsHtml = parseAttributes(rawAttrStr, "class");
 
+      /**
+       * クリーンアップしたMarkdownのパス表記をもとに、インラインアセットから後方一致で画像を探索する
+       */
+      const findMatchingAsset = (markdownSrc: string): string | null => {
+        const cleanSrc = markdownSrc
+          .replace(/^(\.\.\/|\.\/)+/, "")
+          .toLowerCase();
+        if (assets[cleanSrc]) return assets[cleanSrc];
+
+        const keys = Object.keys(assets);
+        for (const key of keys) {
+          if (key.endsWith(cleanSrc)) return assets[key];
+        }
+        return null;
+      };
+
+      const matchedAsset = findMatchingAsset(src);
+      if (matchedAsset) src = matchedAsset;
+
       let altText = "";
-      if (title) {
-        altText = `${title.trim()}の画像`;
-      }
+      if (title) altText = `${title.trim()}の画像`;
 
       const titleAttr = title ? ` title="${title.trim()}"` : "";
       return `<img src="${src}"${attrsHtml} alt="${altText}"${titleAttr}>`;
