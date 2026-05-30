@@ -22,7 +22,6 @@ function initPresenter(): void {
 
   if (!iframe || !container || !openerWin) return;
 
-  // 親ウィンドウが保持している共通のスライドHTMLおよび生成関数を安全にブリッジ
   const rawSlidesHtml = (openerWin as any).currentSlidesHtml || "";
   if (openerWin.createSrcDoc) {
     iframe.srcdoc = openerWin.createSrcDoc(rawSlidesHtml);
@@ -51,7 +50,6 @@ function initPresenter(): void {
     }
   }
 
-  // ビューアー（親）側から直接メモリ経由で叩かれる同期関数を露出
   (window as any).syncPresenterScroll = (pageNumber: number) => {
     if (globalCurrentPage === pageNumber) return;
     globalCurrentPage = pageNumber;
@@ -65,7 +63,6 @@ function initPresenter(): void {
     globalCurrentPage = targetPage;
     navigateToPage(globalCurrentPage, true);
 
-    // 親の同期受け口関数を直接実行（通信遅延ゼロの逆同期）
     if (openerWin && openerWin.syncViewerFromPresenter) {
       openerWin.syncViewerFromPresenter(globalCurrentPage);
     }
@@ -77,7 +74,6 @@ function initPresenter(): void {
 
     globalTotalPages = iframeDoc.querySelectorAll(".page").length;
 
-    // 開いた瞬間のスライド位置をビューアー側に自動同調
     if (openerWin && typeof openerWin.globalCurrentPage === "number") {
       globalCurrentPage = openerWin.globalCurrentPage;
       navigateToPage(globalCurrentPage, false);

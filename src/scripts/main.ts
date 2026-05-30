@@ -12,6 +12,11 @@ interface SlidesResult {
   html: string;
 }
 
+interface DroppedFile {
+  relativePath: string;
+  file: File;
+}
+
 const BASE_WIDTH = 1280;
 const BASE_HEIGHT = 720;
 
@@ -19,6 +24,50 @@ let globalCurrentPage = 1;
 let globalTotalPages = 0;
 let currentMarkdownText = "";
 let presenterWindow: Window | null = null;
+
+/**
+ * FileSystemEntryを再帰的に走査し、階層パス情報を持ったFileオブジェクトのフラットな配列を収集する
+ * file://環境下でブラウザのエンコードバグが発生した場合は明示的に例外を外へ投げる
+ */
+async function collectFilesViaEntries(
+  entry: FileSystemEntry,
+  currentPath = "",
+): Promise<DroppedFile[]> {
+  const results: DroppedFile[] = [];
+
+  if (entry.isFile) {
+    const fileEntry = entry as FileSystemFileEntry;
+    const file = await new Promise<File>((resolve, reject) => {
+      fileEntry.file(
+        (f) => resolve(f),
+        (err) => reject(err),
+      );
+    });
+
+    const relativePath = currentPath
+      ? `${currentPath}/${file.name}`
+      : file.name;
+    results.push({ relativePath, file });
+  } else if (entry.isDirectory) {
+    const dirEntry = entry as FileSystemDirectoryEntry;
+    const dirReader = dirEntry.createReader();
+
+    const entries = await new Promise<FileSystemEntry[]>((resolve, reject) => {
+      dirReader.readEntries(
+        (res) => resolve(res),
+        (err) => reject(err),
+      );
+    });
+
+    const newPath = currentPath ? `${currentPath}/${entry.name}` : entry.name;
+    for (const childEntry of entries) {
+      const childFiles = await collectFilesViaEntries(childEntry, newPath);
+      results.push(...childFiles);
+    }
+  }
+
+  return results;
+}
 
 async function init(): Promise<void> {
   setupDragAndDrop();
@@ -68,22 +117,108 @@ function setupDragAndDrop(): void {
     e.preventDefault();
     dropZone.classList.remove("dragover");
 
-    const file = e.dataTransfer?.files[0];
-    if (!file || !file.name.endsWith(".md")) {
-      alert("Markdownファイル(.md)をドロップしてください。");
-      return;
+    const items = e.dataTransfer?.items;
+    const rawFiles = e.dataTransfer?.files;
+    if (!rawFiles) return;
+
+    let droppedFiles: DroppedFile[] = [];
+    let isFallbackMode = false;
+
+    if (items && items.length > 0) {
+      try {
+        for (const item of Array.from(items)) {
+          const entry = item.webkitGetAsEntry();
+          if (entry) {
+            const files = await collectFilesViaEntries(entry);
+            droppedFiles.push(...files);
+          }
+        }
+      } catch (err) {
+        isFallbackMode = true;
+      }
+    } else {
+      isFallbackMode = true;
+    }
+
+    if (isFallbackMode) {
+      for (const file of Array.from(rawFiles)) {
+        const relativePath = file.webkitRelativePath || file.name;
+        droppedFiles.push({ relativePath, file });
+      }
     }
 
     try {
-      currentMarkdownText = await file.text();
+      const assetsMap: Record<string, string> = {};
+      const duplicateFiles: string[] = [];
+      let mdContent = "";
+      let mdTitle = "";
+
+      for (const dropped of droppedFiles) {
+        const { relativePath, file } = dropped;
+        const key = relativePath.toLowerCase();
+
+        if (file.name.endsWith(".md")) {
+          if (mdContent) {
+            duplicateFiles.push(relativePath);
+          } else {
+            mdContent = await new Promise<string>((resolve, reject) => {
+              const reader = new FileReader();
+              reader.onload = () => resolve(reader.result as string);
+              reader.onerror = () => reject(reader.error);
+              reader.readAsText(file);
+            });
+            mdTitle = file.name;
+          }
+        } else if (/\.(png|jpe?g|gif|svg|webp)$/i.test(file.name)) {
+          if (assetsMap[key]) {
+            duplicateFiles.push(relativePath);
+          } else {
+            assetsMap[key] = await new Promise<string>((resolve, reject) => {
+              const reader = new FileReader();
+              reader.onload = () => resolve(reader.result as string);
+              reader.onerror = () => reject(reject.error);
+              reader.readAsDataURL(file);
+            });
+          }
+        }
+      }
+
+      if (duplicateFiles.length > 0) {
+        alert(
+          `以下のファイル名または相対パスが重複しているため、処理を中断しました:\n${duplicateFiles.join("\n")}`,
+        );
+        return;
+      }
+
+      if (!mdContent) {
+        if (isFallbackMode && rawFiles.length === 1 && rawFiles[0].size === 0) {
+          alert(
+            "【ブラウザの制限による通知】\nお使いのブラウザのセキュリティ制限（file://プロトコルにおける日本語パス制限）により、フォルダ構造の直接解析に失敗しました。\n\nお手数ですが、フォルダを開いて中身のファイル群をすべて選択（Ctrl + A）し、それらをまとめてドロップしてください。",
+          );
+        } else {
+          alert(
+            "Markdownファイル(.md)が見つかりません。ファイルまたはフォルダ内のファイルをすべて選択してドロップしてください。",
+          );
+        }
+        return;
+      }
+
+      currentMarkdownText = mdContent;
       dropZone.style.display = "none";
 
-      const result = SlidesEngine.run(currentMarkdownText) as SlidesResult;
-      if (result.title) document.title = result.title;
+      const result = SlidesEngine.run(
+        currentMarkdownText,
+        assetsMap,
+      ) as SlidesResult;
+      if (result.title) {
+        document.title = result.title;
+      } else {
+        document.title = mdTitle;
+      }
 
       setupViewer(result.html);
     } catch (err) {
-      console.error("ファイルの読み込みに失敗しました:", err);
+      console.error("ファイルのパースに失敗しました:", err);
       alert("ファイルの解析に失敗しました。");
     }
   });
@@ -181,7 +316,6 @@ function setupViewer(slidesHtml: string): void {
       }
     }
 
-    // プレゼンター（子）ウィンドウからの逆同調を受け付ける
     (window as any).syncViewerFromPresenter = (pageNumber: number) => {
       if (globalCurrentPage === pageNumber) return;
       globalCurrentPage = pageNumber;
@@ -295,18 +429,12 @@ function setupViewer(slidesHtml: string): void {
           (window as any).currentSlidesHtml = slidesHtml;
           (window as any).globalCurrentPage = globalCurrentPage;
 
-          // 💡 カプセル化アーキテクチャの核心プレースホルダー
           const embeddedData = "__PRESENTER_DATA_PLACEHOLDER__";
           let presenterHtmlContent = "";
 
           if (embeddedData.startsWith("DEV_HTML:")) {
-            // 開発環境（dev.js経由）時は、プレーンテキストとしてそのまま抽出
             presenterHtmlContent = embeddedData.slice(9);
           } else {
-            // 💡 複雑な箇所への補足:
-            // 本番環境（build.js）では完全に安全なBase64のASCII文字のみで注入されています。
-            // ブラウザネイティブの TextDecoder を用いることで、日本語等のマルチバイト文字列の破壊を
-            // 完全に防止した状態でピクセルパーフェクトにHTML/JSコードをメモリ上へ復元します。
             const binaryString = atob(embeddedData);
             const len = binaryString.length;
             const bytes = new Uint8Array(len);
@@ -328,4 +456,8 @@ function setupViewer(slidesHtml: string): void {
   };
 }
 
-document.addEventListener("DOMContentLoaded", init);
+if (document.readyState === "loading") {
+  document.addEventListener("DOMContentLoaded", init);
+} else {
+  init();
+}
