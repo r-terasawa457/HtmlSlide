@@ -25,7 +25,7 @@ async function init(): Promise<void> {
 }
 
 /**
- * ビューアーおよびプレゼンターのiframe用srcdocを生成（グローバルに公開）
+ * ビューアーおよびプレゼンターの内部 iframe 用 srcdoc 生成関数
  */
 (window as any).createSrcDoc = function createSrcDoc(
   slidesHtml: string,
@@ -181,7 +181,7 @@ function setupViewer(slidesHtml: string): void {
       }
     }
 
-    // 子（プレゼンター）ウィンドウ側から直接叩かれる逆同期共通口
+    // プレゼンター（子）ウィンドウからの逆同調を受け付ける
     (window as any).syncViewerFromPresenter = (pageNumber: number) => {
       if (globalCurrentPage === pageNumber) return;
       globalCurrentPage = pageNumber;
@@ -292,16 +292,30 @@ function setupViewer(slidesHtml: string): void {
         );
 
         if (presenterWindow) {
-          // 💡 複雑な箇所への補足:
-          // 子ウィンドウが親を参照・ロードできるようにメモリ空間にブリッジデータを一時退避
           (window as any).currentSlidesHtml = slidesHtml;
           (window as any).globalCurrentPage = globalCurrentPage;
 
-          // 💡 複雑な箇所への補足:
-          // build.js によって、コンパイル後の「スクリプト内包型 presenter.html」文字列がここに完全インジェクションされます
-          const presenterHtmlContent = `__PRESENTER_HTML_STRING__`;
+          // 💡 カプセル化アーキテクチャの核心プレースホルダー
+          const embeddedData = "__PRESENTER_DATA_PLACEHOLDER__";
+          let presenterHtmlContent = "";
 
-          // 空のウィンドウ空間に本物のHTML・JSドキュメントをパースさせてネイティブ起動
+          if (embeddedData.startsWith("DEV_HTML:")) {
+            // 開発環境（dev.js経由）時は、プレーンテキストとしてそのまま抽出
+            presenterHtmlContent = embeddedData.slice(9);
+          } else {
+            // 💡 複雑な箇所への補足:
+            // 本番環境（build.js）では完全に安全なBase64のASCII文字のみで注入されています。
+            // ブラウザネイティブの TextDecoder を用いることで、日本語等のマルチバイト文字列の破壊を
+            // 完全に防止した状態でピクセルパーフェクトにHTML/JSコードをメモリ上へ復元します。
+            const binaryString = atob(embeddedData);
+            const len = binaryString.length;
+            const bytes = new Uint8Array(len);
+            for (let i = 0; i < len; i++) {
+              bytes[i] = binaryString.charCodeAt(i);
+            }
+            presenterHtmlContent = new TextDecoder("utf-8").decode(bytes);
+          }
+
           presenterWindow.document.open();
           presenterWindow.document.write(presenterHtmlContent);
           presenterWindow.document.close();

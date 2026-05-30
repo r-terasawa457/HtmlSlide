@@ -1,13 +1,8 @@
-/**
- * 💡 プレゼンターウィンドウ内部のネイティブコンテキストで実行される独立スクリプト
- */
-
 const BASE_WIDTH = 1280;
 const BASE_HEIGHT = 720;
 let globalCurrentPage = 1;
 let globalTotalPages = 0;
 
-// 親ウィンドウ（window.opener）のカスタム関数・変数にアクセスするための型定義
 interface ExtendedWindow extends Window {
   syncViewerFromPresenter?: (pageNumber: number) => void;
   createSrcDoc?: (html: string) => string;
@@ -27,7 +22,7 @@ function initPresenter(): void {
 
   if (!iframe || !container || !openerWin) return;
 
-  // 親ウィンドウが保持している共通のデータ・関数資産を安全に引き継ぐ
+  // 親ウィンドウが保持している共通のスライドHTMLおよび生成関数を安全にブリッジ
   const rawSlidesHtml = (openerWin as any).currentSlidesHtml || "";
   if (openerWin.createSrcDoc) {
     iframe.srcdoc = openerWin.createSrcDoc(rawSlidesHtml);
@@ -56,7 +51,7 @@ function initPresenter(): void {
     }
   }
 
-  // 親ウィンドウ（main.js）から、このポップアップの関数を直接メモリ上で叩けるようにグローバル露出させる
+  // ビューアー（親）側から直接メモリ経由で叩かれる同期関数を露出
   (window as any).syncPresenterScroll = (pageNumber: number) => {
     if (globalCurrentPage === pageNumber) return;
     globalCurrentPage = pageNumber;
@@ -70,7 +65,7 @@ function initPresenter(): void {
     globalCurrentPage = targetPage;
     navigateToPage(globalCurrentPage, true);
 
-    // 親（ビューアー）の共通受け口関数を直接実行して同期（逆同期）
+    // 親の同期受け口関数を直接実行（通信遅延ゼロの逆同期）
     if (openerWin && openerWin.syncViewerFromPresenter) {
       openerWin.syncViewerFromPresenter(globalCurrentPage);
     }
@@ -82,7 +77,7 @@ function initPresenter(): void {
 
     globalTotalPages = iframeDoc.querySelectorAll(".page").length;
 
-    // 親ウィンドウ側の現在の閲覧ページに初期位置をジャストフィットさせる
+    // 開いた瞬間のスライド位置をビューアー側に自動同調
     if (openerWin && typeof openerWin.globalCurrentPage === "number") {
       globalCurrentPage = openerWin.globalCurrentPage;
       navigateToPage(globalCurrentPage, false);
@@ -106,7 +101,6 @@ function initPresenter(): void {
       }
     };
 
-    // ポップアップのウィンドウ全体、およびスライド実体(iframe)の双方にキー入力をバインド
     window.addEventListener("keydown", handlePresenterKeyDown);
     if (iframe.contentWindow) {
       iframe.contentWindow.addEventListener("keydown", handlePresenterKeyDown);

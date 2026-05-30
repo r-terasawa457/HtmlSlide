@@ -6,7 +6,6 @@
     <link rel="stylesheet" href="/dist/main.css" />
     <script type="module" src="/dist/main.js" defer></script>
     <style>
-      /* 初期状態のドラッグ＆ドロップエリアのスタイル */
       #drop-zone {
         position: fixed;
         top: 0;
@@ -49,7 +48,7 @@
     <div id="drop-zone">
       <div class="drop-message">
         <h3>Markdownファイルをここにドロップ</h3>
-        <p>file:// プロトコルによる完全サーバーレス動作に対応しています</p>
+        <p>file:// プロトコルによる完全スタンドアロン動作に対応しています</p>
       </div>
     </div>
 
@@ -144,17 +143,6 @@
           ></iframe>
         </div>
       </div>
-    </div>
-
-    <div id="present-ui" style="display: none">
-      <div id="present-container">
-        <iframe
-          id="present-iframe"
-          style="width: 100%; height: 100%; border: none; overflow: hidden"
-          scrolling="no"
-        ></iframe>
-      </div>
-      <div id="fullscreen-hint">全画面表示 (F11)</div>
     </div>
   </body>
 </html>

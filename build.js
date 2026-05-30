@@ -1,7 +1,7 @@
 import { join } from "path";
 
 console.log(
-  "\x1b[36m[Bun Build]\x1b[0m Starting compilation & HTML multi-entry bundling...",
+  "\x1b[36m[Bun Build]\x1b[0m Starting compilation & Base64 encapsulated bundling...",
 );
 
 // 1. プレゼンター側スクリプトの単独コンパイル
@@ -44,18 +44,20 @@ try {
     .replace("/* BUILD_INJECT_STYLES */", () => compiledCss)
     .replace("/* BUILD_INJECT_SCRIPT */", () => compiledPresenterJs);
 
-  // 4. main.js の内部にあるプレースホルダーへ、組み立てたプレゼンターHTMLを文字列として安全に置換・インジェクション
-  // 💡 複雑な箇所への補足:
-  // ミニファイコード内の特殊文字やエスケープの破壊を防ぐため、文字列関数コールバックを使い、
-  // バッククォートやドル記号を事前にサニタイズして安全に流し込みます。
-  compiledMainJs = compiledMainJs.replace("__PRESENTER_HTML_STRING__", () => {
-    return bundledPresenterHtml
-      .replace(/\\/g, "\\\\")
-      .replace(/`/g, "\\`")
-      .replace(/\$/g, "\\$");
-  });
+  // 4. 💡 組み立てたHTMLドキュメント全体を安全なBase64文字列に変換
+  const base64PresenterHtml = Buffer.from(
+    bundledPresenterHtml,
+    "utf-8",
+  ).toString("base64");
 
-  // 5. index.html へのメインアセットのインライン結合
+  // 5. main.js の内部にあるプレースホルダーをBase64文字列で置換
+  // Base64文字セットは [A-Za-z0-9+/=] のみのため、置換用マクロ文字（$など）の誤評価リスクが完全にゼロになります。
+  compiledMainJs = compiledMainJs.replace(
+    "__PRESENTER_DATA_PLACEHOLDER__",
+    () => base64PresenterHtml,
+  );
+
+  // 6. index.html へのメインアセットのインライン結合
   function inlineAssets(htmlTemplate, cssContent, jsContent) {
     const cssPattern = /<link[^>]*href=["']\/dist\/main\.css["'][^>]*\/?>/i;
     const jsPattern =
@@ -72,7 +74,7 @@ try {
   await Bun.write("./dist/index.html", bundleHtml);
 
   console.log(
-    "\x1b[32m[Bun Build] ✨ Success! Perfectly bundled files into: ./dist/index.html\x1b[0m",
+    "\x1b[32m[Bun Build] ✨ Success! stand-alone single file generated at: ./dist/index.html\x1b[0m",
   );
 } catch (bundleError) {
   console.error("❌ HTML Bundling failed:", bundleError);
