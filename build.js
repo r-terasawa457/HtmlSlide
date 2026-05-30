@@ -32,12 +32,28 @@ if (!mainBuildResult.success) {
   process.exit(1);
 }
 
+// 2.2. PPTXエクスポート側スクリプトのコンパイル
+const pptxExportBuildResult = await Bun.build({
+  entrypoints: ["./src/scripts/pptxExport.ts"],
+  outdir: "./dist",
+  minify: true,
+  target: "browser",
+  format: "esm",
+});
+
+if (!pptxExportBuildResult.success) {
+  console.error("❌ PPTX Export Build failed:", pptxExportBuildResult.logs);
+  process.exit(1);
+}
+
 try {
   let compiledMainJs = await Bun.file("./dist/main.js").text();
   const compiledPresenterJs = await Bun.file("./dist/presenter.js").text();
+  const compiledPptxExportJs = await Bun.file("./dist/pptxExport.js").text();
   const compiledCss = await Bun.file("./dist/main.css").text();
   const sourceHtml = await Bun.file("./index.html").text();
   const presenterTemplate = await Bun.file("./src/presenter.html").text();
+  const pptxExportTemplate = await Bun.file("./src/pptx_export.html").text();
 
   // 2.5. slides.cssの@import依存を静的ファイル内容で完全埋め込み
   let slidesCss = await Bun.file("./src/css/slides.css").text();
@@ -75,6 +91,22 @@ try {
   compiledMainJs = compiledMainJs.replace(
     "__PRESENTER_DATA_PLACEHOLDER__",
     () => base64PresenterHtml,
+  );
+
+  // 5.5. pptx_export.html の組み立てとBase64埋め込み
+  const bundledPptxExportHtml = pptxExportTemplate.replace(
+    "/* BUILD_INJECT_SCRIPT */",
+    () => compiledPptxExportJs,
+  );
+
+  const base64PptxExportHtml = Buffer.from(
+    bundledPptxExportHtml,
+    "utf-8",
+  ).toString("base64");
+
+  compiledMainJs = compiledMainJs.replace(
+    "__PPTX_EXPORT_DATA_PLACEHOLDER__",
+    () => base64PptxExportHtml,
   );
 
   // 6. index.html へのメインアセットのインライン結合

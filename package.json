@@ -4,6 +4,7 @@
   "type": "module",
   "private": true,
   "devDependencies": {
+    "@tailwindcss/cli": "^4.3.0",
     "@types/bun": "latest",
     "@types/markdown-it": "^14.1.2"
   },
@@ -13,6 +14,7 @@
   "dependencies": {
     "@types/mathjax": "^0.0.40",
     "bootstrap": "^5.3.8",
+    "dom-to-pptx": "^1.1.9",
     "dompurify": "^3.0.8",
     "highlight.js": "^11.11.1",
     "markdown-it": "^14.2.0",
@@ -24,6 +26,7 @@
   ],
   "scripts": {
     "build": "bun build.js",
+    "build:tailwind": "bunx @tailwindcss/cli -i ./src/css/tailwind_base.css -o ./dist/tailwind_base.css --minify",
     "build:watch": "bun build ./src/scripts/indexMain.js --outdir ./dist --watch",
     "dev": "bun dev.js"
   }
