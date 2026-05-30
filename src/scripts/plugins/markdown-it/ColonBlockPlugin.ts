@@ -1,210 +1,281 @@
-import MarkdownIt from "markdown-it";
+import type MarkdownIt from "markdown-it";
 import StateBlock from "markdown-it/lib/rules_block/state_block.mjs";
 
-export interface colonBlockOptions {
-  marker?: string;
-  mode?: "indent" | "colon" | "hybrid";
-}
+const marker_char = ":".charCodeAt(0);
+const marker_one_line = 2;
+const marker_min_block = 3;
+const defaultAttrName = "class";
+const validTagRegex = /^[a-zA-Z][a-zA-Z0-9-]*$/;
 
-export default function colonBlockPlugin(
-  md: MarkdownIt,
-  options: colonBlockOptions = {},
-) {
-  const markerChar = options.marker || ":";
-  const mode = options.mode || "colon";
-  const minLength = 3;
+/**
+ * Parses a parameter string into an array of attribute key-value pairs.
+ * Words without an explicit key are automatically grouped into the default 'class' attribute.
+ * * @param attrsStr - The raw parameter string extracted from the block header.
+ * @returns An array of [attributeName, attributeValue] tuples.
+ */
+function parseAttrs(attrsStr: string): [string, string][] {
+  const attrs: [string, string][] = [];
+  const defaultAttrValues: string[] = [];
 
-  function getMarkerCount(state: StateBlock, line: number): number {
-    //TODO : 存在意義不明
-    const bMark = state.bMarks[line] ?? 0;
-    const tShift = state.tShift[line] ?? 0;
-    const eMark = state.eMarks[line] ?? 0;
-    const pos = bMark + tShift;
-    let count = 0;
-    while (pos + count < eMark && state.src[pos + count] === markerChar) {
-      count++;
+  const regex = /([a-zA-Z0-9_-]+)="((?:[^"\\]|\\.)*)"|([^\s"=]+)/g;
+  const matches = attrsStr.matchAll(regex);
+
+  for (const match of matches) {
+    if (match[1] !== undefined && match[2] !== undefined) {
+      const key = match[1];
+      const value = match[2].replace(/\\"/g, '"').replace(/\\\\/g, "\\");
+
+      if (key === defaultAttrName) {
+        defaultAttrValues.push(...value.split(/\s+/));
+      } else {
+        attrs.push([key, value]);
+      }
+    } else if (match[3] !== undefined) {
+      defaultAttrValues.push(match[3]);
     }
-    return count >= minLength ? count : 0;
   }
 
-  function colonBlockRule(
-    state: StateBlock,
-    startLine: number,
-    endLine: number,
-    silent: boolean,
-  ): boolean {
-    const bMark = state.bMarks[startLine] ?? 0;
-    const tShift = state.tShift[startLine] ?? 0;
-    const eMark = state.eMarks[startLine] ?? 0;
-    const pos = bMark + tShift;
-    const lineText = state.src.slice(pos, eMark);
+  if (defaultAttrValues.length > 0) {
+    attrs.unshift([defaultAttrName, defaultAttrValues.join(" ")]);
+  }
 
-    // ==========================================
-    // 1. 【1行ブロック記法】の処理
-    // ==========================================
-    if (
-      lineText.startsWith(markerChar.repeat(2)) &&
-      !lineText.startsWith(markerChar.repeat(3))
-    ) {
-      let inQuotes = false;
-      let trueCloseIdx = -1;
-      for (let i = 2; i < lineText.length; i++) {
-        const char = lineText[i];
-        if (char === '"') {
-          inQuotes = !inQuotes;
-          continue;
-        }
-        if (
-          !inQuotes &&
-          char === markerChar &&
-          lineText[i + 1] === markerChar &&
-          lineText[i + 2] !== markerChar
-        ) {
-          trueCloseIdx = i;
-          break;
-        }
+  return attrs;
+}
+
+/**
+ * Markdown-it plugin that introduces custom colon-delimited blocks.
+ * Supports both single-line (`::`) and multi-line (`:::`) containers with dynamic tag names and attributes.
+ * * @param md - The MarkdownIt parser instance.
+ */
+export default function ColonBlockPlugin(md: MarkdownIt): void {
+  md.block.ruler.before("fence", "colon_block", ColonBlock);
+
+  md.renderer.rules.colon_block_open = (tokens, idx, options, env, self) => {
+    const token = tokens[idx];
+    const tagName = token.tag || "div";
+
+    const attrsStr = self.renderAttrs(token);
+    return `<${tagName}${attrsStr}>`;
+  };
+
+  md.renderer.rules.colon_block_close = (tokens, idx, options, env, self) => {
+    const token = tokens[idx];
+    const tagName = token.tag || "div";
+
+    return `</${tagName}>\n`;
+  };
+}
+
+function ColonBlock(
+  state: StateBlock,
+  startLine: number,
+  endLine: number,
+  silent: boolean,
+): boolean {
+  let pos = state.bMarks[startLine] + state.tShift[startLine];
+  let max = state.eMarks[startLine];
+
+  if (state.sCount[startLine] - state.blkIndent >= 4) {
+    return false;
+  }
+
+  if (pos + marker_one_line > max) {
+    return false;
+  }
+
+  if (state.src.charCodeAt(pos) !== marker_char) {
+    return false;
+  }
+
+  let mem = pos;
+  pos = state.skipChars(pos, marker_char);
+
+  let marker_len = pos - mem;
+
+  if (marker_len === marker_one_line) {
+    // Notation Sample:
+    // ::[tagName?] [attrs?]:: content
+
+    const lineText = state.src.slice(pos, max);
+
+    let closeIdx = -1;
+    let inQuotes = false;
+
+    for (let i = 0; i < lineText.length; i++) {
+      if (lineText[i] === "\\" && inQuotes) {
+        i++;
+        continue;
       }
-      if (trueCloseIdx !== -1) {
-        if (silent) return true;
-        let tagNameEndIdx = 2;
-        let tagName = "div";
-        if (lineText.length > 2 && lineText[2] !== " ") {
-          tagNameEndIdx = lineText.slice(0, trueCloseIdx).indexOf(" ");
-          if (tagNameEndIdx === -1) {
-            tagNameEndIdx = trueCloseIdx;
-          }
-          tagName = lineText.slice(2, tagNameEndIdx);
-        }
-        //TODO : 属性のパースをもっとちゃんとやる（クォート内スペースとかも考慮する）
-        const attrPart = lineText.slice(tagNameEndIdx, trueCloseIdx).trim();
-        const inlineContent = lineText.slice(trueCloseIdx + 2).trim();
 
-        const tokenOpen = state.push("colon_block_open", tagName, 1);
-        tokenOpen.markup = markerChar.repeat(2);
-        tokenOpen.map = [startLine, startLine + 1];
-        if (attrPart) tokenOpen.attrSet("data-attr", attrPart);
-
-        const tokenInline = state.push("inline", "", 0);
-        tokenInline.content = inlineContent;
-        tokenInline.map = [startLine, startLine + 1];
-        tokenInline.children = [];
-
-        const tokenClose = state.push("colon_block_close", tagName, -1);
-        tokenClose.markup = markerChar.repeat(2);
-
-        state.line = startLine + 1;
-        return true;
+      if (lineText[i] === '"') {
+        inQuotes = !inQuotes;
+        continue;
       }
-    }
-
-    // ==========================================
-    // 2. 【複数行ブロック記法】のバリデーション
-    // ==========================================
-    const startMarkerCount = getMarkerCount(state, startLine);
-    if (startMarkerCount === 0) return false;
-    if (silent) return true;
-
-    const rawContent = state.src.slice(pos + startMarkerCount, eMark);
-    let tagName = "div";
-    let tagNameLength = 1;
-    if (rawContent[0] !== " ") {
-      console.log("rawContent:", rawContent);
-      tagNameLength =
-        rawContent.indexOf(" ") !== -1
-          ? rawContent.indexOf(" ")
-          : rawContent.length;
-      tagName = rawContent.slice(0, tagNameLength);
-    }
-    const tokenOpen = state.push("colon_block_open", tagName, 1);
-    tokenOpen.markup = markerChar.repeat(startMarkerCount);
-    tokenOpen.map = [startLine, 0];
-    if (rawContent)
-      tokenOpen.attrSet("data-meta", rawContent.slice(tagNameLength).trim());
-
-    // ==========================================
-    // 3. 下方向への行スキャン（終了条件の判定）
-    // ==========================================
-    let nextLine = startLine + 1;
-    let hasExplicitClose = false;
-
-    // 子要素をパースする際の「期待されるインデント深さ」を設定
-    const innerBlkIndent = mode === "indent" ? tShift + 4 : tShift;
-
-    for (; nextLine < endLine; nextLine++) {
-      if (state.isEmpty(nextLine)) continue;
-
-      const currentTShift = state.tShift[nextLine] ?? 0;
-      const currentSCount = state.sCount[nextLine] ?? 0;
-
-      // 【モード1】indentモード：インデントが浅くなったら終了
-      if (mode === "indent" && currentSCount < innerBlkIndent) {
+      if (!inQuotes && lineText.slice(i, i + 2) === "::") {
+        closeIdx = i;
         break;
       }
+    }
+    if (closeIdx === -1) {
+      return false;
+    }
 
-      // 【モード2 / 3】コロンの数による終了判定
-      if (mode === "colon" || mode === "hybrid") {
-        const currentMarkerCount = getMarkerCount(state, nextLine);
-        if (currentMarkerCount > 0) {
-          if (currentMarkerCount < startMarkerCount) break;
-          if (currentMarkerCount === startMarkerCount) {
-            hasExplicitClose = true;
-            break;
-          }
-        }
-        // hybridモードのインデント戻り判定
-        if (mode === "hybrid" && currentSCount < innerBlkIndent) {
-          break;
-        }
+    let tagName = "div";
+    let attrs = "";
+
+    let idx = 0;
+    mem = idx;
+
+    idx = lineText.slice(0, closeIdx).indexOf(" ", idx);
+    idx = idx === -1 ? closeIdx : idx;
+    if (idx - mem > 0) {
+      const TagName0 = lineText.slice(mem, idx);
+      if (validTagRegex.test(TagName0)) {
+        tagName = TagName0;
+      } else {
+        return false;
       }
     }
-
-    // ==========================================
-    // 4. 内部要素の再帰パース（インデントの調整・隔離）
-    // ==========================================
-    // 親の環境状態をすべてバックアップ
-    const oldBlkIndent = state.blkIndent;
-    const oldLineMax = state.lineMax;
-    const oldParentShift = state.tShift.slice();
-    const oldSCount = state.sCount.slice();
-
-    // 重要!!：内部パース時に、子要素行の「見た目のスペースインデント」を
-    // ブロック開始ライン（親）と同じ基準にシフト・相殺させて markdown-it に認識させる
-    if (mode === "indent") {
-      for (let i = startLine + 1; i < nextLine; i++) {
-        state.tShift[i] = Math.max(0, (state.tShift[i] ?? 0) - innerBlkIndent);
-        state.sCount[i] = Math.max(0, (state.sCount[i] ?? 0) - innerBlkIndent);
-      }
+    if (closeIdx - idx > 0) {
+      attrs = lineText.slice(idx, closeIdx).trim();
     }
 
-    state.blkIndent = innerBlkIndent;
-    state.lineMax = nextLine;
-
-    // 安全に内部トークンを生成
-    state.md.block.tokenize(state, startLine + 1, nextLine);
-
-    // バックアップから元の環境状態に完全復元
-    state.blkIndent = oldBlkIndent;
-    state.lineMax = oldLineMax;
-    for (let i = startLine + 1; i < nextLine; i++) {
-      state.tShift[i] = oldParentShift[i] ?? 0;
-      state.sCount[i] = oldSCount[i] ?? 0;
+    if (silent) {
+      return true;
     }
 
-    // ==========================================
-    // 5. 終了タグの処理と、次行へのポインタ遷移
-    // ==========================================
-    const tokenClose = state.push("colon_block_close", tagName, -1);
-    tokenClose.markup = markerChar.repeat(startMarkerCount);
+    state.line = startLine + 1;
 
-    if (tokenOpen.map) {
-      tokenOpen.map[1] = hasExplicitClose ? nextLine + 1 : nextLine;
+    const token_o = state.push("colon_block_open", tagName, 1);
+    token_o.markup = "::";
+    token_o.info = attrs;
+    token_o.map = [startLine, state.line];
+    token_o.attrs = parseAttrs(attrs);
+
+    const token_i = state.push("inline", "", 0);
+    token_i.content = lineText.slice(closeIdx + 2).trimStart();
+    token_i.map = [startLine, state.line];
+    token_i.children = [];
+
+    const token_c = state.push("colon_block_close", tagName, -1);
+    token_c.markup = "::";
+
+    return true;
+  } else if (marker_len < marker_min_block) {
+    return false;
+  }
+
+  // Notation Sample:
+  /*
+  :::[tagName?] [attrs?]
+  inner blocks
+  :::
+  */
+
+  const lineText = state.src.slice(pos, max);
+
+  let tagName = "div";
+  let attrs = "";
+  let idx = 0;
+  mem = idx;
+  let lmax = max - pos;
+
+  idx = lineText.indexOf(" ", idx);
+  idx = idx === -1 ? lmax : idx;
+  if (idx - mem > 0) {
+    const TagName0 = lineText.slice(mem, idx);
+    if (validTagRegex.test(TagName0)) {
+      tagName = TagName0;
+    } else {
+      return false;
     }
+  }
+  if (lmax - idx > 0) {
+    attrs = lineText.slice(idx, lmax).trim();
+  }
 
-    state.line = hasExplicitClose ? nextLine + 1 : nextLine;
+  if (silent) {
     return true;
   }
 
-  md.block.ruler.before("paragraph", "colon_block", colonBlockRule, {
-    alt: ["paragraph", "reference", "blockquote", "list"],
-  });
+  let nextLine = startLine;
+  const sCount = state.sCount[startLine];
+  let haveEndMarker = false;
+  let alsoOpenMarker = false;
+  let cmarker_len = 0;
+
+  for (;;) {
+    nextLine++;
+    if (nextLine >= endLine) {
+      break;
+    }
+
+    pos = mem = state.bMarks[nextLine] + state.tShift[nextLine];
+    max = state.eMarks[nextLine];
+
+    if (pos < max && state.sCount[nextLine] < state.blkIndent) {
+      break;
+    }
+
+    //     // Skip nested content lines that are deeper than the block indent
+    //     if (pos < max && state.sCount[nextLine] > sCount) {
+    //       continue;
+    //     }
+
+    if (state.src.charCodeAt(pos) !== marker_char) {
+      continue;
+    }
+
+    if (state.sCount[nextLine] - state.blkIndent >= 4) {
+      continue;
+    }
+
+    // Terminate the block if the indent is shallower than the base indent
+    if (pos < max && state.sCount[nextLine] < sCount) {
+      break;
+    }
+
+    pos = state.skipChars(pos, marker_char);
+    cmarker_len = pos - mem;
+
+    if (cmarker_len < marker_len) {
+      continue;
+    }
+
+    pos = state.skipSpaces(pos);
+
+    if (pos < max) {
+      alsoOpenMarker = true;
+    }
+
+    haveEndMarker = true;
+    break;
+  }
+
+  const old_parent = state.parentType;
+  const old_line_max = state.lineMax;
+
+  state.parentType = "container";
+  // Restrict the inner tokenizer from parsing past the closing line of this container
+  state.lineMax = nextLine;
+
+  const token_o = state.push("colon_block_open", tagName, 1);
+  token_o.markup = ":".repeat(marker_len);
+  token_o.block = true;
+  token_o.info = attrs;
+  token_o.map = [startLine, nextLine];
+  token_o.attrs = parseAttrs(attrs);
+
+  // Recursively tokenize the nested block content
+  state.md.block.tokenize(state, startLine + 1, nextLine);
+
+  const token_c = state.push("colon_block_close", tagName, -1);
+  token_c.markup = ":".repeat(cmarker_len);
+  token_c.block = true;
+
+  state.parentType = old_parent;
+  state.lineMax = old_line_max;
+  state.line = nextLine + (haveEndMarker && !alsoOpenMarker ? 1 : 0);
+
+  return true;
 }

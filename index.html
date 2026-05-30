@@ -4,32 +4,7 @@
     <meta charset="UTF-8" />
     <title>Dynamic Slide System</title>
     <link rel="stylesheet" href="/dist/main.css" />
-    <script src="/dist/main.js" defer></script>
-    <script>
-      MathJax = {
-        sre: {
-          worker: false,
-        },
-        loader: {
-          load: ["input/tex-base", "output/chtml", "ui/menu", "[tex]/require"],
-        },
-        output: {
-          font: "mathjax-newcm",
-        },
-        startup: {
-          typeset: true, // 自動走査
-        },
-        tex: {
-          packages: { "[+]": ["require"] },
-          inlineMath: [["$", "$"]],
-          displayMath: [["$$", "$$"]],
-        },
-      };
-    </script>
-    <script
-      src="https://cdn.jsdelivr.net/npm/mathjax@4/startup.js"
-      defer
-    ></script>
+    <script type="module" src="/dist/main.js" defer></script>
   </head>
   <body>
     <div id="viewer-ui">
@@ -115,12 +90,24 @@
         </div>
       </div>
       <div id="viewer-container">
-        <div id="slides-scale-wrapper"></div>
+        <div id="slides-scale-wrapper">
+          <iframe
+            id="viewer-iframe"
+            style="width: 100%; height: 100%; border: none; overflow: hidden"
+            scrolling="no"
+          ></iframe>
+        </div>
       </div>
     </div>
 
     <div id="present-ui" style="display: none">
-      <div id="present-container"></div>
+      <div id="present-container">
+        <iframe
+          id="present-iframe"
+          style="width: 100%; height: 100%; border: none; overflow: hidden"
+          scrolling="no"
+        ></iframe>
+      </div>
       <div id="fullscreen-hint">全画面表示 (F11)</div>
     </div>
   </body>

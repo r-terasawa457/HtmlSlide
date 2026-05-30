@@ -15,9 +15,9 @@
     "bootstrap": "^5.3.8",
     "dompurify": "^3.0.8",
     "highlight.js": "^11.11.1",
-    "markdown-it": "^14.1.1",
-    "marked": "^18.0.4",
-    "mathjax": "^4.1.2"
+    "markdown-it": "^14.2.0",
+    "markdown-it-mathjax3": "^5.2.0",
+    "marked": "^18.0.4"
   },
   "include": [
     "src/scripts/env.d.ts"
