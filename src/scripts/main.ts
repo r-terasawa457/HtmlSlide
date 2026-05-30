@@ -12,51 +12,44 @@ interface SlidesResult {
   html: string;
 }
 
-type SyncMessage =
-  | { type: "REQUEST_DATA" }
-  | { type: "SEND_DATA"; markdown: string }
-  | { type: "GOTO_PAGE"; page: number };
-
 const BASE_WIDTH = 1280;
 const BASE_HEIGHT = 720;
 
-const urlParams = new URLSearchParams(window.location.search);
-const isPresentMode = urlParams.get("mode") === "present";
-
-// ウィンドウを跨いで共有・同期される現在のページ番号（無限ループ防止の判定に使用）
 let globalCurrentPage = 1;
 let globalTotalPages = 0;
 let currentMarkdownText = "";
 let presenterWindow: Window | null = null;
 
 async function init(): Promise<void> {
-  if (isPresentMode) {
-    document.body.classList.add("present-mode");
-    const dropZone = document.getElementById("drop-zone");
-    if (dropZone) dropZone.style.display = "none";
-    setupPresenter();
-  } else {
-    document.body.classList.add("viewer-mode");
-    setupDragAndDrop();
-  }
+  setupDragAndDrop();
 }
 
 /**
- * file://環境下で安全にメッセージを通信相手（ウィンドウ参照）へ送信するヘルパー
+ * ビューアーおよびプレゼンターのiframe用srcdocを生成（グローバルに公開）
  */
-function sendPostMessage(target: Window | null, message: SyncMessage): void {
-  if (target) {
-    target.postMessage(message, "*");
-  }
-}
+(window as any).createSrcDoc = function createSrcDoc(
+  slidesHtml: string,
+): string {
+  const parentStyles = Array.from(document.querySelectorAll("style"))
+    .map((style) => style.textContent || "")
+    .join("\n");
 
-function createSrcDoc(slidesHtml: string): string {
-  return `<!DOCTYPE html><html lang="ja"><head><meta charset="UTF-8" /><link rel="stylesheet" href="/dist/main.css" /><style>body{margin:0;padding:0;background:transparent;overflow:hidden;}${slidesCss}@media print{body{overflow:visible!important;}.slides{transform:none!important;width:${BASE_WIDTH}px!important;height:auto!important;}.page{page-break-after:always;page-break-inside:avoid;}}</style></head><body>${slidesHtml}</body></html>`;
-}
+  return `<!DOCTYPE html>
+<html lang="ja">
+<head>
+  <meta charset="UTF-8" />
+  <style>
+    body { margin: 0; padding: 0; background: transparent; overflow: hidden; }
+    ${parentStyles}
+    ${slidesCss}
+  </style>
+</head>
+<body>
+  ${slidesHtml}
+</body>
+</html>`;
+};
 
-/**
- * ビューアーモード専用：ドラッグ＆ドロップハンドラーの設定
- */
 function setupDragAndDrop(): void {
   const dropZone = document.getElementById("drop-zone");
   if (!dropZone) return;
@@ -96,9 +89,6 @@ function setupDragAndDrop(): void {
   });
 }
 
-/**
- * ビューアー（親画面）の制御ロジック
- */
 function setupViewer(slidesHtml: string): void {
   const viewerUi = document.getElementById("viewer-ui");
   if (viewerUi) viewerUi.style.display = "block";
@@ -126,7 +116,7 @@ function setupViewer(slidesHtml: string): void {
   )
     return;
 
-  iframe.srcdoc = createSrcDoc(slidesHtml);
+  iframe.srcdoc = (window as any).createSrcDoc(slidesHtml);
 
   iframe.onload = () => {
     const iframeDoc = iframe.contentDocument;
@@ -191,29 +181,13 @@ function setupViewer(slidesHtml: string): void {
       }
     }
 
-    // プレゼンター（子）および入力欄からの変更を受け付けるイベントリスナー
-    window.addEventListener("message", (e: MessageEvent) => {
-      const data = e.data as SyncMessage;
-      if (!data) return;
-
-      if (data.type === "REQUEST_DATA" && presenterWindow) {
-        sendPostMessage(presenterWindow, {
-          type: "SEND_DATA",
-          markdown: currentMarkdownText,
-        });
-        sendPostMessage(presenterWindow, {
-          type: "GOTO_PAGE",
-          page: globalCurrentPage,
-        });
-      }
-
-      if (data.type === "GOTO_PAGE") {
-        if (globalCurrentPage === data.page) return; // すでに同一ページなら処理をスキップ（無限ループ防止）
-        globalCurrentPage = data.page;
-        pageInput.value = globalCurrentPage.toString();
-        scrollToPage(globalCurrentPage, true);
-      }
-    });
+    // 子（プレゼンター）ウィンドウ側から直接叩かれる逆同期共通口
+    (window as any).syncViewerFromPresenter = (pageNumber: number) => {
+      if (globalCurrentPage === pageNumber) return;
+      globalCurrentPage = pageNumber;
+      pageInput.value = globalCurrentPage.toString();
+      scrollToPage(globalCurrentPage, true);
+    };
 
     const printSlides = (): void => {
       if (iframe.contentWindow) {
@@ -280,10 +254,10 @@ function setupViewer(slidesHtml: string): void {
 
       globalCurrentPage = targetVal;
       scrollToPage(globalCurrentPage, true);
-      sendPostMessage(presenterWindow, {
-        type: "GOTO_PAGE",
-        page: globalCurrentPage,
-      });
+
+      if (presenterWindow && (presenterWindow as any).syncPresenterScroll) {
+        (presenterWindow as any).syncPresenterScroll(globalCurrentPage);
+      }
     };
 
     viewer.onscroll = () => {
@@ -301,11 +275,10 @@ function setupViewer(slidesHtml: string): void {
       if (globalCurrentPage !== detectedPage) {
         globalCurrentPage = detectedPage;
         pageInput.value = globalCurrentPage.toString();
-        // プレゼンター側ウィンドウへ通知
-        sendPostMessage(presenterWindow, {
-          type: "GOTO_PAGE",
-          page: globalCurrentPage,
-        });
+
+        if (presenterWindow && (presenterWindow as any).syncPresenterScroll) {
+          (presenterWindow as any).syncPresenterScroll(globalCurrentPage);
+        }
       }
     };
 
@@ -313,136 +286,31 @@ function setupViewer(slidesHtml: string): void {
     if (presentBtn) {
       presentBtn.onclick = () => {
         presenterWindow = window.open(
-          "index.html?mode=present",
+          "",
           "presWin",
           `width=${BASE_WIDTH},height=${BASE_HEIGHT},menubar=no,toolbar=no,location=no,status=no`,
         );
+
+        if (presenterWindow) {
+          // 💡 複雑な箇所への補足:
+          // 子ウィンドウが親を参照・ロードできるようにメモリ空間にブリッジデータを一時退避
+          (window as any).currentSlidesHtml = slidesHtml;
+          (window as any).globalCurrentPage = globalCurrentPage;
+
+          // 💡 複雑な箇所への補足:
+          // build.js によって、コンパイル後の「スクリプト内包型 presenter.html」文字列がここに完全インジェクションされます
+          const presenterHtmlContent = `__PRESENTER_HTML_STRING__`;
+
+          // 空のウィンドウ空間に本物のHTML・JSドキュメントをパースさせてネイティブ起動
+          presenterWindow.document.open();
+          presenterWindow.document.write(presenterHtmlContent);
+          presenterWindow.document.close();
+        }
       };
     }
 
     updateLayout();
     window.dispatchEvent(new Event("resize"));
-  };
-}
-
-/**
- * プレゼンター（子画面）の制御ロジック
- */
-function setupPresenter(): void {
-  const viewerUi = document.getElementById("viewer-ui");
-  const presentUi = document.getElementById("present-ui");
-  if (viewerUi) viewerUi.style.display = "none";
-  if (presentUi) presentUi.style.display = "flex";
-
-  const iframe = document.getElementById(
-    "present-iframe",
-  ) as HTMLIFrameElement | null;
-  const container = document.getElementById("present-container");
-
-  if (!iframe || !container) return;
-
-  // 親ウィンドウへデータ要求を送信
-  if (window.opener) {
-    sendPostMessage(window.opener, { type: "REQUEST_DATA" });
-  }
-
-  window.addEventListener("message", (e: MessageEvent) => {
-    const data = e.data as SyncMessage;
-    if (!data) return;
-
-    if (data.type === "SEND_DATA") {
-      const result = SlidesEngine.run(data.markdown) as SlidesResult;
-      iframe.srcdoc = createSrcDoc(result.html);
-    }
-
-    if (data.type === "GOTO_PAGE") {
-      if (globalCurrentPage === data.page) return; // すでに同一ページなら何もしない
-      globalCurrentPage = data.page;
-      navigateToPage(globalCurrentPage, true);
-    }
-  });
-
-  function updateLayout(): void {
-    const scale = Math.min(
-      window.innerWidth / BASE_WIDTH,
-      window.innerHeight / BASE_HEIGHT,
-    );
-    if (container) container.style.transform = `scale(${scale})`;
-  }
-
-  function navigateToPage(pageNumber: number, smooth = true): void {
-    const iframeDoc = iframe!.contentDocument;
-    if (!iframeDoc) return;
-
-    const target = iframeDoc.querySelector(
-      "#slide-" + pageNumber,
-    ) as HTMLElement | null;
-    if (target && iframe!.contentWindow) {
-      iframe!.contentWindow.scrollTo({
-        top: target.offsetTop,
-        behavior: smooth ? "smooth" : "auto",
-      });
-    }
-  }
-
-  // プレゼンター側でのページ送り制御（次へ・前へ）
-  function changePageRelative(offset: number): void {
-    const targetPage = globalCurrentPage + offset;
-    if (targetPage < 1 || targetPage > globalTotalPages) return;
-
-    globalCurrentPage = targetPage;
-    navigateToPage(globalCurrentPage, true);
-
-    // 親（ビューアー）へ変更通知を送信
-    if (window.opener) {
-      sendPostMessage(window.opener, {
-        type: "GOTO_PAGE",
-        page: globalCurrentPage,
-      });
-    }
-  }
-
-  iframe.onload = () => {
-    const iframeDoc = iframe.contentDocument;
-    if (!iframeDoc) return;
-
-    globalTotalPages = iframeDoc.querySelectorAll(".page").length;
-
-    // プレゼンター側でのキーボード操作イベントハンドラ
-    const handlePresenterKeyDown = (e: KeyboardEvent) => {
-      switch (e.key) {
-        case "ArrowRight":
-        case "Space":
-        case "PageDown":
-        case "Enter":
-          e.preventDefault();
-          changePageRelative(1);
-          break;
-        case "ArrowLeft":
-        case "Backspace":
-        case "PageUp":
-          e.preventDefault();
-          changePageRelative(-1);
-          break;
-      }
-    };
-
-    // 親ウィンドウ・iframe内部の双方でキー入力を受け付けるようバインド
-    window.addEventListener("keydown", handlePresenterKeyDown);
-    if (iframe.contentWindow) {
-      iframe.contentWindow.addEventListener("keydown", handlePresenterKeyDown);
-    }
-
-    window.onresize = updateLayout;
-
-    const hint = document.getElementById("fullscreen-hint");
-    if (hint) {
-      hint.onclick = () => {
-        document.documentElement.requestFullscreen().catch(console.error);
-      };
-    }
-
-    updateLayout();
   };
 }
 

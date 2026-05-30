@@ -3,14 +3,18 @@ import { watch } from "fs";
 
 const PORT = 3000;
 const connectedSockets = new Set();
-const LOG_FILE_PATH = "./dist/browser-errors.log";
-const CODE_FILE_PATH = "./dist/main.js";
 
+console.log(
+  "\x1b[36m[Bun Server]\x1b[0m Starting development server & file watchers...",
+);
+
+// 1. main.ts と presenter.ts の双方を並行してコンパイル・自動監視(watch)モードで起動
 Bun.spawn(
   [
     "bun",
     "build",
     "./src/scripts/main.ts",
+    "./src/scripts/presenter.ts",
     "--outdir",
     "./dist",
     "--watch",
@@ -23,6 +27,7 @@ Bun.spawn(
   },
 );
 
+// アセット変更検知時のブラウザ自動リロード通知
 watch("./dist", (eventType, filename) => {
   if (filename && (filename.endsWith(".js") || filename.endsWith(".css"))) {
     setTimeout(() => {
@@ -65,6 +70,7 @@ Bun.serve({
 
     if (pathname === "/") pathname = "/index.html";
 
+    // 2. ビューアー主画面の配信（ライブリロード用スクリプトの注入）
     if (pathname === "/index.html") {
       const file = Bun.file("./index.html");
       if (await file.exists()) {
@@ -84,56 +90,65 @@ Bun.serve({
                   }
                 } catch(err) {}
               };
-
-              function sendErrorToServer(message, source, lineno, colno, error) {
-                if (ws.readyState === WebSocket.OPEN) {
-                  const logPayload = {
-                    message: message || '',
-                    source: source || '',
-                    lineno: lineno || 0,
-                    colno: colno || 0,
-                    stack: error ? error.stack : ''
-                  };
-                  ws.send(JSON.stringify({ type: 'error_log', data: logPayload }));
-                }
-              }
-
-              window.onerror = function(message, source, lineno, colno, error) {
-                sendErrorToServer(message, source, lineno, colno, error);
-                return false;
-              };
-
-              window.addEventListener('error', function(event) {
-                if (event.target && event.target !== window) {
-                  const source = event.target.src || event.target.href || event.target.tagName;
-                  sendErrorToServer('Resource Load Failed (404 or Network Error)', source, 0, 0, null);
-                }
-              }, true);
-
-              const originalConsoleError = console.error;
-              console.error = function(...args) {
-                originalConsoleError.apply(console, args);
-                if (ws.readyState === WebSocket.OPEN) {
-                  sendErrorToServer(args.join(' '), 'console.error', 0, 0, null);
-                }
-              };
-
               ws.onclose = () => console.log('[Live Reload] サーバーとの接続が切断されました。');
             })();
           </script>
         `;
         htmlText = htmlText.replace("</body>", `${clientScript}</body>`);
-        // mathxyjax3の読み込みに備え、開発時も type="module" が適用されるようにする
+
+        // 以前の古いファイル名表記(indexMain.js)の置換痕跡を、実際の main.js に合わせてクレンジング修正
         htmlText = htmlText.replace(
-          /<script([^>]*src=["']\/dist\/indexMain\.js["'])/i,
+          /<script([^>]*src=["']\/dist\/main\.js["'])/i,
           '<script type="module"$1',
         );
+
         return new Response(htmlText, {
           headers: { "Content-Type": "text/html" },
         });
       }
     }
 
+    // 💡 複雑な箇所への補足（デバッグ運用の核心部）:
+    // main.jsへのリクエストが発生した際、内部のプレースホルダー「__PRESENTER_HTML_STRING__」に対して
+    // あえてCSSやJSをインライン化せず、個別の外部ファイルとして読み込ませる「開発専用の分離型HTML」を動的注入します。
+    // これにより、ブラウザはポップアップ展開後に独立したリソースとしてCSS/JSをサーバーに要求するため、
+    // F12デベロッパーツールの Source タブでファイルを完全に分離させた状態でのデバッグ運用が可能になります。
+    if (pathname === "/dist/main.js") {
+      const file = Bun.file("./dist/main.js");
+      if (await file.exists()) {
+        let jsText = await file.text();
+
+        const devPresenterHtml = `<!DOCTYPE html>
+<html lang="ja">
+<head>
+  <meta charset="UTF-8" />
+  <title>Dynamic Slide System [プレゼンター]</title>
+  <link rel="stylesheet" href="/dist/main.css" />
+</head>
+<body class="present-mode">
+  <div id="present-container">
+    <iframe id="present-iframe" style="width: 100%; height: 100%; border: none; overflow: hidden" scrolling="no"></iframe>
+  </div>
+  <div id="fullscreen-hint">全画面表示 (F11)</div>
+  <script type="module" src="/dist/presenter.js"></script>
+</body>
+</html>`;
+
+        // 置換文字列内（ミニファイコード）に含まれる特殊記号によるエスケープ破壊を防ぐ安全設計
+        jsText = jsText.replace("__PRESENTER_HTML_STRING__", () => {
+          return devPresenterHtml
+            .replace(/\\/g, "\\\\")
+            .replace(/`/g, "\\`")
+            .replace(/\$/g, "\\$");
+        });
+
+        return new Response(jsText, {
+          headers: { "Content-Type": "application/javascript" },
+        });
+      }
+    }
+
+    // 3. 分離された静的ファイルの標準配信（/dist/main.css, /dist/presenter.js 等はここを通過）
     let file = Bun.file(join(".", pathname));
     if (await file.exists()) return new Response(file);
 
