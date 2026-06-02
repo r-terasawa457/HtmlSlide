@@ -2,11 +2,43 @@
 @import "/vs.css";
 
 /* ============================================================
-       共通設定（構造・レイアウト）
+       スライド設定（構造・レイアウト）
        ============================================================ */
+/* --------------------------------------------------
+フォントの設定
+-------------------------------------------------- */
+@font-face {
+  font-family: "DefaultFont";
+  src: local("Roboto");
+
+  font-style: normal;
+  unicode-range: U+0000-007F; /* 半角英数字 */
+}
+@font-face {
+  font-family: "DefaultFont";
+  src: local("Roboto Italic");
+
+  font-style: italic;
+  unicode-range: U+0000-007F; /* 半角英数字 */
+}
+@font-face {
+  font-family: "DefaultFont";
+  src: local("BIZ UDPGothic"), local("BIZ UDPゴシック");
+}
+
+/* テック系 */
+/* "IBM Plex Sans JP" */
+/* ビジネス系 */
+/* "Yu Gothic", "YuGothic" */
+
+/* 学術系 */
 body {
   margin: 0;
-  font-family: "Noto Sans JP", "Noto Sans CJK JP", sans-serif;
+  font-family: "DefaultFont", sans-serif;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+  font-feature-settings: "palt";
+  font-weight: 400;
 }
 
 .page {
