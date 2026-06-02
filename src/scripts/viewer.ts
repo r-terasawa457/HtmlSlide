@@ -6,6 +6,7 @@ let globalTotalPages = 0;
 let presenterWindow: Window | null = null;
 
 const slidesCss = "__SLIDES_CSS_PLACEHOLDER__";
+const pptxExportData = "__PPTX_EXPORT_DATA_PLACEHOLDER__";
 
 /**
  * ビューアーおよびプレゼンターの内部 iframe 用 srcdoc 生成関数
@@ -228,6 +229,86 @@ export function setupViewer(slidesHtml: string): void {
         }
       }
     };
+
+    const pptxBtn = document.getElementById(
+      "pptxBtn",
+    ) as HTMLButtonElement | null;
+    if (pptxBtn) {
+      pptxBtn.onclick = () => {
+        const title = document.title || "presentation";
+        const fileName = `${title}.pptx`;
+
+        pptxBtn.disabled = true;
+        pptxBtn.title = "PPTX生成中...";
+
+        // 一時的なエクスポート用iframeを画面外に作成
+        const exportIframe = document.createElement("iframe");
+        exportIframe.style.position = "absolute";
+        exportIframe.style.left = "-9999px";
+        exportIframe.style.top = "-9999px";
+        exportIframe.style.width = "1280px";
+        exportIframe.style.height = "720px";
+        exportIframe.style.border = "none";
+
+        const cleanup = () => {
+          if (document.body.contains(exportIframe)) {
+            document.body.removeChild(exportIframe);
+          }
+          delete (window as any).onPptxExportComplete;
+          delete (window as any).onPptxExportError;
+          pptxBtn.disabled = false;
+          pptxBtn.title = "pptxに出力";
+        };
+
+        (window as any).onPptxExportComplete = () => {
+          cleanup();
+          alert("PPTXのエクスポートが完了しました。");
+        };
+
+        (window as any).onPptxExportError = (msg: string) => {
+          cleanup();
+          alert(`PPTXのエクスポートに失敗しました:\n${msg}`);
+        };
+
+        // Base64からpptx_export.htmlのコンテンツを復元
+        let pptxExportHtmlContent = "";
+        if (pptxExportData.startsWith("DEV_HTML:")) {
+          pptxExportHtmlContent = pptxExportData.slice(9);
+        } else {
+          try {
+            const binaryString = atob(pptxExportData);
+            const len = binaryString.length;
+            const bytes = new Uint8Array(len);
+            for (let i = 0; i < len; i++) {
+              bytes[i] = binaryString.charCodeAt(i);
+            }
+            pptxExportHtmlContent = new TextDecoder("utf-8").decode(bytes);
+          } catch (e: any) {
+            (window as any).onPptxExportError(`デコードエラー: ${e.message}`);
+            return;
+          }
+        }
+
+        exportIframe.srcdoc = pptxExportHtmlContent;
+
+        exportIframe.onload = () => {
+          const exportWin = exportIframe.contentWindow as any;
+          if (exportWin && exportWin.startExport) {
+            exportWin.startExport({
+              slidesHtml,
+              slidesCss,
+              fileName,
+            });
+          } else {
+            (window as any).onPptxExportError(
+              "エクスポートモジュールの読み込みに失敗しました。",
+            );
+          }
+        };
+
+        document.body.appendChild(exportIframe);
+      };
+    }
 
     const presentBtn = document.getElementById("presentBtn");
     if (presentBtn) {
