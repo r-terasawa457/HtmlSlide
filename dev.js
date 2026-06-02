@@ -123,15 +123,14 @@ Bun.serve({
 </body>
 </html>`;
 
-        jsText = jsText.replace("__PRESENTER_DATA_PLACEHOLDER__", () => {
-          // 💡 複雑な箇所への補足:
-          // main.ts 側のダブルクォーテーション表現を破壊しないよう、
-          // 内部のダブルクォーテーションと生の改行コードを確実にエスケープ文字列へ置換します。
-          return devPresenterHtml
-            .replace(/\\/g, "\\\\")
-            .replace(/"/g, '\\"')
-            .replace(/\r?\n/g, "\\n");
-        });
+        const escapedDevPresenterHtml = devPresenterHtml
+          .replace(/\\/g, "\\\\")
+          .replace(/"/g, '\\"')
+          .replace(/\r?\n/g, "\\n");
+
+        jsText = jsText
+          .split("__PRESENTER_DATA_PLACEHOLDER__")
+          .join(escapedDevPresenterHtml);
 
         return new Response(jsText, {
           headers: { "Content-Type": "application/javascript" },

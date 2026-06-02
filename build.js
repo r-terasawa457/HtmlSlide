@@ -62,10 +62,9 @@ try {
     .replace(/"/g, '\\"')
     .replace(/\r?\n/g, "\\n");
 
-  compiledMainJs = compiledMainJs.replace(
-    "__SLIDES_CSS_PLACEHOLDER__",
-    () => escapedSlideRootCss,
-  );
+  compiledMainJs = compiledMainJs
+    .split("__SLIDES_CSS_PLACEHOLDER__")
+    .join(escapedSlideRootCss);
 
   // 2.6. ビルトインテーマCSSの収集と埋め込み
   const builtinThemes = {
@@ -82,10 +81,9 @@ try {
     .replace(/\\/g, "\\\\")
     .replace(/"/g, '\\"');
 
-  compiledMainJs = compiledMainJs.replace(
-    "__BUILTIN_THEMES_PLACEHOLDER__",
-    () => escapedBuiltinThemes,
-  );
+  compiledMainJs = compiledMainJs
+    .split("__BUILTIN_THEMES_PLACEHOLDER__")
+    .join(escapedBuiltinThemes);
 
   // 3. presenter.html の組み立て（CSSとJSの完全内包化）
   const bundledPresenterHtml = presenterTemplate
@@ -100,10 +98,9 @@ try {
 
   // 5. main.js の内部にあるプレースホルダーをBase64文字列で置換
   // Base64文字セットは [A-Za-z0-9+/=] のみのため、置換用マクロ文字（$など）の誤評価リスクが完全にゼロになります。
-  compiledMainJs = compiledMainJs.replace(
-    "__PRESENTER_DATA_PLACEHOLDER__",
-    () => base64PresenterHtml,
-  );
+  compiledMainJs = compiledMainJs
+    .split("__PRESENTER_DATA_PLACEHOLDER__")
+    .join(base64PresenterHtml);
 
   // 5.5. pptx_export.html の組み立てとBase64埋め込み
   const bundledPptxExportHtml = pptxExportTemplate.replace(
@@ -116,10 +113,9 @@ try {
     "utf-8",
   ).toString("base64");
 
-  compiledMainJs = compiledMainJs.replace(
-    "__PPTX_EXPORT_DATA_PLACEHOLDER__",
-    () => base64PptxExportHtml,
-  );
+  compiledMainJs = compiledMainJs
+    .split("__PPTX_EXPORT_DATA_PLACEHOLDER__")
+    .join(base64PptxExportHtml);
 
   // 6. index.html へのメインアセットのインライン結合
   function inlineAssets(htmlTemplate, cssContent, jsContent) {

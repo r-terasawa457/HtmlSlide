@@ -1,0 +1,8 @@
+/* 1. 自動スキャン（HTML や JS からのクラス抽出）を完全に無効化 */
+@source "none";
+
+/* 2. Preflight のみをレイヤー構造でインポート */
+@layer theme, base, components, utilities;
+
+@import "tailwindcss/theme.css" layer(theme);
+@import "tailwindcss/preflight.css" layer(base);

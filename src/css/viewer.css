@@ -4,11 +4,11 @@
   --active-blue: #4285f4;
 }
 
-/* 💡 ビューアー起動時のみ適用されるように限定化 */
-body.viewer-mode {
+/* 💡 ビューアーの基本スタイル */
+body {
   margin: 0;
   background: var(--bg-color);
-  font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+  font-family: "Segoe UI", Tahoma, Geneva, Verdana, sans-serif;
   overflow: hidden;
   height: 100vh;
 }

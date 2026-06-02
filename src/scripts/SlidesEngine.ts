@@ -119,9 +119,7 @@ function extractTextFromHtml(html: string | null | undefined): string {
 
 function renderTokenChildrenContent(token: any): string {
   if (!token || !token.children) return "";
-  return token.children
-    ? token.children.map((child: any) => child.content || "").join("")
-    : "";
+  return token.children!.map((child: any) => child.content || "").join("");
 }
 
 function createHtmlBlockToken(state: any, content: string): any {
@@ -663,7 +661,22 @@ export const SlidesEngine = {
             );
           }
 
+          // 各ページの tokens から <style> タグを抽出する
+          const pageStyleTokens: any[] = [];
+          for (let i = tokens.length - 1; i >= 0; i--) {
+            const t = tokens[i];
+            if (
+              t &&
+              t.type === "html_block" &&
+              /^\s*<style\b/i.test(t.content)
+            ) {
+              const [styleToken] = tokens.splice(i, 1);
+              pageStyleTokens.unshift(styleToken);
+            }
+          }
+
           const newSectionTokens: any[] = [];
+          newSectionTokens.push(...pageStyleTokens);
           newSectionTokens.push(...headerTokens);
           newSectionTokens.push(
             createHtmlBlockToken(ctx.state, '<div class="content">'),
