@@ -132,6 +132,25 @@ Bun.serve({
           .split("__PRESENTER_DATA_PLACEHOLDER__")
           .join(escapedDevPresenterHtml);
 
+        // ビルトインテーマCSSの収集と埋め込み
+        const builtinThemes = {
+          "css/bootstrap.min.css": await Bun.file(
+            "./static/css/bootstrap.min.css",
+          ).text(),
+          "css/vs.css": await Bun.file("./src/theme/vs.css").text(),
+          "slide-thema-default.css": await Bun.file(
+            "./src/theme/slide-thema-default.css",
+          ).text(),
+        };
+
+        const escapedBuiltinThemes = JSON.stringify(builtinThemes)
+          .replace(/\\/g, "\\\\")
+          .replace(/"/g, '\\"');
+
+        jsText = jsText
+          .split("__BUILTIN_THEMES_PLACEHOLDER__")
+          .join(escapedBuiltinThemes);
+
         return new Response(jsText, {
           headers: { "Content-Type": "application/javascript" },
         });

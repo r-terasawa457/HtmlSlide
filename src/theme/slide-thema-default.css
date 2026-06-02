@@ -26,14 +26,6 @@
 /* "Yu Gothic", "YuGothic" */
 
 /* 学術系 */
-body {
-  margin: 0;
-  font-family: "DefaultFont", sans-serif;
-  -webkit-font-smoothing: antialiased;
-  -moz-osx-font-smoothing: grayscale;
-  font-feature-settings: "palt";
-  font-weight: 400;
-}
 
 .page {
   width: 960pt;
@@ -42,6 +34,13 @@ body {
   overflow: hidden;
   box-sizing: border-box;
   background: #fff;
+
+  margin: 0;
+  font-family: "DefaultFont", sans-serif;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+  font-feature-settings: "palt";
+  font-weight: 400;
 }
 
 .page .content,
