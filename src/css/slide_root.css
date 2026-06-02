@@ -1,0 +1,118 @@
+/* ============================================================
+       画面表示用の設定（ブラウザ閲覧時）
+       ============================================================ */
+@media screen {
+  html,
+  body {
+    -ms-overflow-style: none;
+    scrollbar-width: none;
+  }
+
+  body::-webkit-scrollbar {
+    display: none;
+  }
+
+  .body {
+    background: transparent;
+  }
+
+  .slides {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 10pt;
+    padding: 0;
+  }
+
+  .page {
+    box-shadow: 0 0 10pt rgba(0, 0, 0, 0.3);
+  }
+
+  body.present-mode .slides {
+    gap: 0 !important;
+    background: transparent;
+  }
+
+  body.present-mode .page {
+    box-shadow: none;
+  }
+}
+
+/* ============================================================
+       印刷用の設定（構文エラー修正 ＆ 影の完全根絶版）
+       ============================================================ */
+@media print {
+  /* 💡 【最高水準防衛】全要素の box-shadow をワイルドカードで根こそぎ一撃破壊。
+       これにより、セレクタの優先順位の僅かな隙も一切許さず影を完全抹殺します。 */
+  * {
+    box-shadow: none !important;
+    text-shadow: none !important;
+  }
+
+  /* 1. ツールバー、フルスクリーンヒントなどの画面専用UI要素を完全に非表示 */
+  #toolbar,
+  #fullscreen-hint,
+  .separator,
+  button,
+  input {
+    display: none !important;
+  }
+
+  /* 2. スクロール制限を100%解除 */
+  html,
+  body {
+    overflow: visible !important;
+    height: auto !important;
+    background: #fff !important;
+  }
+
+  /* 3. 画面表示用の動的インラインスタイルやtransformズームを完全リセット */
+  #viewer-ui,
+  #viewer-container,
+  #slides-scale-wrapper {
+    display: block !important;
+    overflow: visible !important;
+    height: auto !important;
+    width: auto !important;
+    margin: 0 !important;
+    padding: 0 !important;
+    transform: none !important;
+    position: static !important;
+  }
+
+  /* 4. PowerPoint標準サイズ（16:9）で出力用紙を定義 */
+  @page {
+    size: 338.67mm 190.5mm;
+    margin: 0;
+  }
+
+  /* 5. スライドステージのレイアウトをリセット */
+  .slides {
+    display: block !important;
+    transform: none !important;
+    width: auto !important;
+    height: auto !important;
+    gap: 0 !important;
+    padding: 0 !important;
+    margin: 0 !important;
+  }
+
+  /* 6. 各スライドを用紙にピクセルパーフェクトで収める */
+  .page {
+    width: 960pt !important;
+    height: 540pt !important;
+    position: relative !important;
+    top: 0 !important;
+    left: 0 !important;
+
+    /* ページごとの改ページを徹底強制 */
+    page-break-after: always !important;
+    break-after: page !important;
+    page-break-inside: avoid !important;
+    break-inside: avoid !important;
+
+    /* 背景色やシンタックスハイライトのカラーを強制出力 */
+    print-color-adjust: exact;
+    -webkit-print-color-adjust: exact;
+  }
+}

@@ -1,0 +1,189 @@
+/* --------------------------------------------------
+フォントの設定
+-------------------------------------------------- */
+@font-face {
+  font-family: "DefaultFont";
+  src: local("Roboto");
+
+  font-style: normal;
+  unicode-range: U+0000-007F; /* 半角英数字 */
+}
+@font-face {
+  font-family: "DefaultFont";
+  src: local("Roboto Italic");
+
+  font-style: italic;
+  unicode-range: U+0000-007F; /* 半角英数字 */
+}
+@font-face {
+  font-family: "DefaultFont";
+  src: local("BIZ UDPGothic"), local("BIZ UDPゴシック");
+}
+
+/* テック系 */
+/* "IBM Plex Sans JP" */
+/* ビジネス系 */
+/* "Yu Gothic", "YuGothic" */
+
+/* 学術系 */
+body {
+  margin: 0;
+  font-family: "DefaultFont", sans-serif;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+  font-feature-settings: "palt";
+  font-weight: 400;
+}
+
+.page {
+  width: 960pt;
+  height: 540pt;
+  position: relative;
+  overflow: hidden;
+  box-sizing: border-box;
+  background: #fff;
+}
+
+.page .content,
+.page .text,
+.page .figure,
+.page .page-number {
+  position: absolute;
+  box-sizing: border-box;
+}
+
+.page > header {
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 40pt;
+  padding: 10pt;
+  font-size: 18pt;
+}
+
+.page > footer {
+  bottom: 0;
+  left: 0;
+  width: 100%;
+  height: 30pt;
+  padding: 8pt;
+  position: absolute;
+  box-sizing: border-box;
+}
+
+.page-number {
+  right: 15pt;
+  bottom: 10pt;
+  font-size: 10pt;
+  position: absolute;
+  box-sizing: border-box;
+}
+
+.content {
+  position: absolute;
+  top: 60pt;
+  bottom: 40pt;
+  left: 40pt;
+  right: 40pt;
+  overflow: hidden;
+}
+
+h1,
+h2 {
+  font-size: 28pt;
+  margin: 0 0 15pt 0;
+}
+
+p {
+  font-size: 16pt;
+}
+
+.text {
+  max-width: 60%;
+  z-index: 1;
+}
+
+/* ============================================================
+       markdown用の設定
+       ============================================================ */
+
+.page > .content {
+  font-size: 18pt;
+  line-height: 1.6;
+}
+
+.page > .content ul {
+  padding-left: 1.5em;
+}
+
+.page > .content li {
+  margin-bottom: 5pt;
+}
+
+.page > .content strong {
+  color: #620606;
+}
+
+.page > .content em {
+  color: #042a51;
+}
+
+/* コードブロックのスタイル設定 */
+.page > .content pre {
+  background-color: transparent;
+  border: 1px solid #d0d7de;
+  border-radius: 8px;
+  padding: 0;
+  margin: 10pt 0;
+  overflow: hidden;
+}
+
+/* 実際のコードと背景色を担当する部分 */
+.page > .content pre code.hljs {
+  display: block;
+  overflow-x: auto;
+  padding: 16pt;
+  font-size: 13pt;
+}
+
+/* 行内コード（`code`）のスタイル */
+.page > .content :not(pre) > code {
+  font-family: "SFMono-Regular", Consolas, monospace;
+  font-size: 14pt;
+  background-color: rgba(175, 184, 193, 0.2);
+  padding: 0.2em 0.4em;
+  border-radius: 4px;
+}
+
+mjx-container {
+  display: inline-block;
+  margin: 0 0.25em;
+  vertical-align: middle;
+}
+
+mjx-container[display="true"] {
+  display: block;
+  text-align: center;
+  margin: 1em 0;
+}
+
+/* ============================================================
+       bootstrap用の設定
+       ============================================================ */
+
+.row {
+  margin-top: 0;
+  margin-bottom: 1rem;
+}
+
+.clear-start {
+  clear: left;
+}
+
+.clear-end {
+  clear: right;
+}
+
+.d-flow-root {
+  display: flow-root;
+}

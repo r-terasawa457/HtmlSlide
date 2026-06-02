@@ -6,6 +6,7 @@ let globalTotalPages = 0;
 let presenterWindow: Window | null = null;
 
 const slidesCss = "__SLIDES_CSS_PLACEHOLDER__";
+const builtinThemesStr = "__BUILTIN_THEMES_PLACEHOLDER__";
 const pptxExportData = "__PPTX_EXPORT_DATA_PLACEHOLDER__";
 
 /**
@@ -20,7 +21,7 @@ const pptxExportData = "__PPTX_EXPORT_DATA_PLACEHOLDER__";
     window.location.port !== "";
 
   const cssContent = isDev
-    ? `<link rel="stylesheet" href="/src/css/slides.css" />`
+    ? `<link rel="stylesheet" href="/src/css/slide_root.css" />`
     : `<style>${slidesCss}</style>`;
 
   return `<!DOCTYPE html>

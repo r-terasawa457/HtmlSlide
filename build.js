@@ -55,24 +55,36 @@ try {
   const presenterTemplate = await Bun.file("./src/presenter.html").text();
   const pptxExportTemplate = await Bun.file("./src/pptx_export.html").text();
 
-  // 2.5. slides.cssの@import依存を静的ファイル内容で完全埋め込み
-  let slidesCss = await Bun.file("./src/css/slides.css").text();
-  const bootstrapCss = await Bun.file("./static/bootstrap.min.css").text();
-  const vsCss = await Bun.file("./static/vs.css").text();
-
-  slidesCss = slidesCss
-    .replace(/@import\s+['"]\/bootstrap\.min\.css['"];?/gi, () => bootstrapCss)
-    .replace(/@import\s+['"]\/vs\.css['"];?/gi, () => vsCss);
-
-  // compiledMainJsのプレースホルダーをインライン展開されたslidesCssに置換
-  const escapedSlidesCss = slidesCss
+  // 2.5. slide_root.cssの埋め込み
+  const slideRootCss = await Bun.file("./src/css/slide_root.css").text();
+  const escapedSlideRootCss = slideRootCss
     .replace(/\\/g, "\\\\")
     .replace(/"/g, '\\"')
     .replace(/\r?\n/g, "\\n");
 
   compiledMainJs = compiledMainJs.replace(
     "__SLIDES_CSS_PLACEHOLDER__",
-    () => escapedSlidesCss,
+    () => escapedSlideRootCss,
+  );
+
+  // 2.6. ビルトインテーマCSSの収集と埋め込み
+  const builtinThemes = {
+    "css/bootstrap.min.css": await Bun.file(
+      "./static/css/bootstrap.min.css",
+    ).text(),
+    "css/vs.css": await Bun.file("./src/theme/vs.css").text(),
+    "slide-thema-default.css": await Bun.file(
+      "./src/theme/slide-thema-default.css",
+    ).text(),
+  };
+
+  const escapedBuiltinThemes = JSON.stringify(builtinThemes)
+    .replace(/\\/g, "\\\\")
+    .replace(/"/g, '\\"');
+
+  compiledMainJs = compiledMainJs.replace(
+    "__BUILTIN_THEMES_PLACEHOLDER__",
+    () => escapedBuiltinThemes,
   );
 
   // 3. presenter.html の組み立て（CSSとJSの完全内包化）
