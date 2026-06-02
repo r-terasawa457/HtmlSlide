@@ -48,13 +48,35 @@ async function preprocessCodeBlocks(container: HTMLElement): Promise<void> {
  * MathJax(SVG) の数式をPPTX出力時に正しくサイズ計測させ、不要なMathMLテキストを削除するための前処理
  */
 function preprocessMathJax(container: HTMLElement): void {
-  // 1. まず非表示のMathML (mjx-assistive-mml) を完全に除去してテキストエクスポートを防ぐ
-  const assistiveMmls = container.querySelectorAll("mjx-assistive-mml");
-  assistiveMmls.forEach((el) => el.remove());
+  // 1. まず非表示のMathML (mjx-assistive-mml) や標準の math タグを完全に除去してテキストエクスポートを防ぐ
+  const targets = container.querySelectorAll(
+    "mjx-assistive-mml, math, [class*='assistive'], [id*='assistive']",
+  );
+
+  targets.forEach((el, index) => {
+    el.remove();
+  });
+
+  // 追加検証: まだ mathml や math などの要素が残っていないか走査して警告
+  const remainingMaths = container.querySelectorAll(
+    "math, mml, mjx-assistive-mml",
+  );
+  if (remainingMaths.length > 0) {
+    console.warn(
+      "WARNING: Some MathML elements still remain after removal!",
+      remainingMaths,
+    );
+  }
+  // 1.5. スライド内部にインラインで挿入されている style タグをすべて head へ移動（退避）させる
+  // これにより、スタイルは有効なまま、dom-to-pptx が内部のCSSをテキストノードとしてPPTXに書き出すのを防ぎます。
+  const internalStyles = container.querySelectorAll("style");
+  internalStyles.forEach((style, index) => {
+    document.head.appendChild(style);
+  });
 
   // 2. SVGコンテナ要素のサイズを明示的にpx単位に置換
   const mjxContainers = container.querySelectorAll("mjx-container[jax='SVG']");
-  mjxContainers.forEach((mjx) => {
+  mjxContainers.forEach((mjx, idx) => {
     const svg = mjx.querySelector("svg");
     if (!svg) return;
 
