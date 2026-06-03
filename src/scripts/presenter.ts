@@ -3,14 +3,30 @@ const BASE_HEIGHT = 720;
 let globalCurrentPage = 1;
 let globalTotalPages = 0;
 
-interface ExtendedWindow extends Window {
-  syncViewerFromPresenter?: (pageNumber: number) => void;
-  createSrcDoc?: (html: string) => string;
-  currentSlidesHtml?: string;
-  globalCurrentPage?: number;
-}
+function createSrcDoc(slidesHtml: string, slidesCss: string): string {
+  const isDev =
+    window.location.hostname === "localhost" ||
+    window.location.hostname === "127.0.0.1" ||
+    window.location.port !== "";
 
-const openerWin = window.opener as ExtendedWindow | null;
+  const cssContent = isDev
+    ? `<link rel="stylesheet" href="/src/css/slide_root.css" />`
+    : `<style>${slidesCss}</style>`;
+
+  return `<!DOCTYPE html>
+<html lang="ja">
+<head>
+  <meta charset="UTF-8" />
+  <style>
+    body { margin: 0; padding: 0; background: transparent; overflow: hidden; }
+  </style>
+</head>
+<body>
+  ${slidesHtml}
+  ${cssContent}
+</body>
+</html>`;
+}
 
 function initPresenter(): void {
   const iframe = document.getElementById(
@@ -20,12 +36,7 @@ function initPresenter(): void {
     "present-container",
   ) as HTMLElement | null;
 
-  if (!iframe || !container || !openerWin) return;
-
-  const rawSlidesHtml = (openerWin as any).currentSlidesHtml || "";
-  if (openerWin.createSrcDoc) {
-    iframe.srcdoc = openerWin.createSrcDoc(rawSlidesHtml);
-  }
+  if (!iframe || !container || !window.opener) return;
 
   function updateLayout(): void {
     const scale = Math.min(
@@ -50,12 +61,6 @@ function initPresenter(): void {
     }
   }
 
-  (window as any).syncPresenterScroll = (pageNumber: number) => {
-    if (globalCurrentPage === pageNumber) return;
-    globalCurrentPage = pageNumber;
-    navigateToPage(globalCurrentPage, true);
-  };
-
   function changePageRelative(offset: number): void {
     const targetPage = globalCurrentPage + offset;
     if (targetPage < 1 || targetPage > globalTotalPages) return;
@@ -63,56 +68,75 @@ function initPresenter(): void {
     globalCurrentPage = targetPage;
     navigateToPage(globalCurrentPage, true);
 
-    if (openerWin && openerWin.syncViewerFromPresenter) {
-      openerWin.syncViewerFromPresenter(globalCurrentPage);
-    }
+    window.opener.postMessage(
+      { type: "sync_page", page: globalCurrentPage },
+      "*",
+    );
   }
 
-  iframe.onload = () => {
-    const iframeDoc = iframe.contentDocument;
-    if (!iframeDoc) return;
+  // 親からデータ（slidesHtml, slidesCss）を受け取った時にスライドを構築
+  window.addEventListener("message", (e) => {
+    if (!e.data) return;
 
-    globalTotalPages = iframeDoc.querySelectorAll(".page").length;
+    if (e.data.type === "presenter_init") {
+      const { slidesHtml, slidesCss, page } = e.data;
+      iframe.srcdoc = createSrcDoc(slidesHtml, slidesCss);
 
-    if (openerWin && typeof openerWin.globalCurrentPage === "number") {
-      globalCurrentPage = openerWin.globalCurrentPage;
-      navigateToPage(globalCurrentPage, false);
-    }
+      iframe.onload = () => {
+        const iframeDoc = iframe.contentDocument;
+        if (!iframeDoc) return;
 
-    const handlePresenterKeyDown = (e: KeyboardEvent) => {
-      switch (e.key) {
-        case "ArrowRight":
-        case "Space":
-        case "PageDown":
-        case "Enter":
-          e.preventDefault();
-          changePageRelative(1);
-          break;
-        case "ArrowLeft":
-        case "Backspace":
-        case "PageUp":
-          e.preventDefault();
-          changePageRelative(-1);
-          break;
-      }
-    };
+        globalTotalPages = iframeDoc.querySelectorAll(".page").length;
+        globalCurrentPage = page || 1;
+        navigateToPage(globalCurrentPage, false);
 
-    window.addEventListener("keydown", handlePresenterKeyDown);
-    if (iframe.contentWindow) {
-      iframe.contentWindow.addEventListener("keydown", handlePresenterKeyDown);
-    }
+        const handlePresenterKeyDown = (e: KeyboardEvent) => {
+          switch (e.key) {
+            case "ArrowRight":
+            case "Space":
+            case "PageDown":
+            case "Enter":
+              e.preventDefault();
+              changePageRelative(1);
+              break;
+            case "ArrowLeft":
+            case "Backspace":
+            case "PageUp":
+              e.preventDefault();
+              changePageRelative(-1);
+              break;
+          }
+        };
 
-    window.onresize = updateLayout;
+        window.addEventListener("keydown", handlePresenterKeyDown);
+        if (iframe.contentWindow) {
+          iframe.contentWindow.addEventListener(
+            "keydown",
+            handlePresenterKeyDown,
+          );
+        }
 
-    const hint = document.getElementById("fullscreen-hint");
-    if (hint) {
-      hint.onclick = () => {
-        document.documentElement.requestFullscreen().catch(console.error);
+        window.onresize = updateLayout;
+
+        const hint = document.getElementById("fullscreen-hint");
+        if (hint) {
+          hint.onclick = () => {
+            document.documentElement.requestFullscreen().catch(console.error);
+          };
+        }
+
+        updateLayout();
       };
+    } else if (e.data.type === "sync_page") {
+      const pageNumber = e.data.page;
+      if (globalCurrentPage === pageNumber) return;
+      globalCurrentPage = pageNumber;
+      navigateToPage(globalCurrentPage, true);
     }
+  });
 
-    updateLayout();
-  };
+  // 準備完了したことを親ウィンドウに通知
+  window.opener.postMessage({ type: "presenter_ready" }, "*");
 }
 
 if (document.readyState === "loading") {

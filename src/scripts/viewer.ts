@@ -6,21 +6,20 @@ let globalTotalPages = 0;
 let presenterWindow: Window | null = null;
 
 const slidesCss = "__SLIDES_CSS_PLACEHOLDER__";
+const builtinThemesStr = "__BUILTIN_THEMES_PLACEHOLDER__";
 const pptxExportData = "__PPTX_EXPORT_DATA_PLACEHOLDER__";
 
 /**
  * ビューアーおよびプレゼンターの内部 iframe 用 srcdoc 生成関数
  */
-(window as any).createSrcDoc = function createSrcDoc(
-  slidesHtml: string,
-): string {
+function createSrcDoc(slidesHtml: string): string {
   const isDev =
     window.location.hostname === "localhost" ||
     window.location.hostname === "127.0.0.1" ||
     window.location.port !== "";
 
   const cssContent = isDev
-    ? `<link rel="stylesheet" href="/src/css/slides.css" />`
+    ? `<link rel="stylesheet" href="/src/css/slide_root.css" />`
     : `<style>${slidesCss}</style>`;
 
   return `<!DOCTYPE html>
@@ -30,13 +29,13 @@ const pptxExportData = "__PPTX_EXPORT_DATA_PLACEHOLDER__";
   <style>
     body { margin: 0; padding: 0; background: transparent; overflow: hidden; }
   </style>
-  ${cssContent}
 </head>
 <body>
   ${slidesHtml}
+  ${cssContent}
 </body>
 </html>`;
-};
+}
 
 export function setupViewer(slidesHtml: string): void {
   const viewerUi = document.getElementById("viewer-ui");
@@ -65,7 +64,7 @@ export function setupViewer(slidesHtml: string): void {
   )
     return;
 
-  iframe.srcdoc = (window as any).createSrcDoc(slidesHtml);
+  iframe.srcdoc = createSrcDoc(slidesHtml);
 
   iframe.onload = () => {
     const iframeDoc = iframe.contentDocument;
@@ -130,12 +129,29 @@ export function setupViewer(slidesHtml: string): void {
       }
     }
 
-    (window as any).syncViewerFromPresenter = (pageNumber: number) => {
-      if (globalCurrentPage === pageNumber) return;
-      globalCurrentPage = pageNumber;
-      pageInput.value = globalCurrentPage.toString();
-      scrollToPage(globalCurrentPage, true);
-    };
+    // メッセージ通信によるプレゼンターとの同期処理
+    window.addEventListener("message", (e) => {
+      if (!e.data) return;
+      if (e.data.type === "presenter_ready") {
+        if (presenterWindow) {
+          presenterWindow.postMessage(
+            {
+              type: "presenter_init",
+              slidesHtml,
+              slidesCss,
+              page: globalCurrentPage,
+            },
+            "*",
+          );
+        }
+      } else if (e.data.type === "sync_page") {
+        const pageNumber = e.data.page;
+        if (globalCurrentPage === pageNumber) return;
+        globalCurrentPage = pageNumber;
+        pageInput.value = globalCurrentPage.toString();
+        scrollToPage(globalCurrentPage, true);
+      }
+    });
 
     const printSlides = (): void => {
       if (iframe.contentWindow) {
@@ -203,8 +219,11 @@ export function setupViewer(slidesHtml: string): void {
       globalCurrentPage = targetVal;
       scrollToPage(globalCurrentPage, true);
 
-      if (presenterWindow && (presenterWindow as any).syncPresenterScroll) {
-        (presenterWindow as any).syncPresenterScroll(globalCurrentPage);
+      if (presenterWindow) {
+        presenterWindow.postMessage(
+          { type: "sync_page", page: globalCurrentPage },
+          "*",
+        );
       }
     };
 
@@ -224,8 +243,11 @@ export function setupViewer(slidesHtml: string): void {
         globalCurrentPage = detectedPage;
         pageInput.value = globalCurrentPage.toString();
 
-        if (presenterWindow && (presenterWindow as any).syncPresenterScroll) {
-          (presenterWindow as any).syncPresenterScroll(globalCurrentPage);
+        if (presenterWindow) {
+          presenterWindow.postMessage(
+            { type: "sync_page", page: globalCurrentPage },
+            "*",
+          );
         }
       }
     };
@@ -313,22 +335,13 @@ export function setupViewer(slidesHtml: string): void {
     const presentBtn = document.getElementById("presentBtn");
     if (presentBtn) {
       presentBtn.onclick = () => {
-        presenterWindow = window.open(
-          "",
-          "presWin",
-          `width=${BASE_WIDTH},height=${BASE_HEIGHT},menubar=no,toolbar=no,location=no,status=no`,
-        );
+        const embeddedData = "__PRESENTER_DATA_PLACEHOLDER__";
+        let presenterHtmlContent = "";
 
-        if (presenterWindow) {
-          (window as any).currentSlidesHtml = slidesHtml;
-          (window as any).globalCurrentPage = globalCurrentPage;
-
-          const embeddedData = "__PRESENTER_DATA_PLACEHOLDER__";
-          let presenterHtmlContent = "";
-
-          if (embeddedData.startsWith("DEV_HTML:")) {
-            presenterHtmlContent = embeddedData.slice(9);
-          } else {
+        if (embeddedData.startsWith("DEV_HTML:")) {
+          presenterHtmlContent = embeddedData.slice(9);
+        } else {
+          try {
             const binaryString = atob(embeddedData);
             const len = binaryString.length;
             const bytes = new Uint8Array(len);
@@ -336,12 +349,22 @@ export function setupViewer(slidesHtml: string): void {
               bytes[i] = binaryString.charCodeAt(i);
             }
             presenterHtmlContent = new TextDecoder("utf-8").decode(bytes);
+          } catch (e: any) {
+            alert(`プレゼンターの展開エラー: ${e.message}`);
+            return;
           }
-
-          presenterWindow.document.open();
-          presenterWindow.document.write(presenterHtmlContent);
-          presenterWindow.document.close();
         }
+
+        // 親から document.write すると file:// 環境で SecurityError になるため、
+        // Blob URL を生成して window.open に直接指定します
+        const blob = new Blob([presenterHtmlContent], { type: "text/html" });
+        const url = URL.createObjectURL(blob);
+
+        presenterWindow = window.open(
+          url,
+          "presWin",
+          `width=${BASE_WIDTH},height=${BASE_HEIGHT},menubar=no,toolbar=no,location=no,status=no`,
+        );
       };
     }
 

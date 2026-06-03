@@ -145,6 +145,17 @@ function setupDragAndDrop(): void {
               reader.readAsDataURL(file);
             });
           }
+        } else if (/\.css$/i.test(file.name)) {
+          if (assetsMap[key]) {
+            duplicateFiles.push(relativePath);
+          } else {
+            assetsMap[key] = await new Promise<string>((resolve, reject) => {
+              const reader = new FileReader();
+              reader.onload = () => resolve(reader.result as string);
+              reader.onerror = () => reject(reader.error);
+              reader.readAsText(file);
+            });
+          }
         }
       }
 
@@ -156,7 +167,7 @@ function setupDragAndDrop(): void {
       }
 
       if (!mdContent) {
-        const filesArr = Array.from(rawFiles);
+        const filesArr = Array.from(rawFiles!);
         if (isFallbackMode && filesArr.length === 1 && filesArr[0].size === 0) {
           alert(
             "【ブラウザの制限による通知】\nお使いのブラウザのセキュリティ制限（file://プロトコルにおける日本語パス制限）により、フォルダ構造の直接解析に失敗しました。\n\nお手数ですが、フォルダを開いて中身のファイル群をすべて選択（Ctrl + A）し、それらをまとめてドロップしてください。",

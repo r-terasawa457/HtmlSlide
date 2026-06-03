@@ -4,13 +4,23 @@
   --active-blue: #4285f4;
 }
 
-/* 💡 ビューアー起動時のみ適用されるように限定化 */
-body.viewer-mode {
+/* 💡 ビューアーの基本スタイル */
+body {
   margin: 0;
   background: var(--bg-color);
-  font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+  font-family: "Segoe UI", Tahoma, Geneva, Verdana, sans-serif;
   overflow: hidden;
   height: 100vh;
+}
+
+#viewer-ui {
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  display: flex;
+  flex-direction: column;
 }
 
 /* --- ツールバー --- */
@@ -21,6 +31,7 @@ body.viewer-mode {
   display: flex;
   align-items: center;
   justify-content: space-between;
+  margin: 0;
   padding: 0 16px;
   box-shadow: 0 2px 5px rgba(0, 0, 0, 0.3);
   position: relative;

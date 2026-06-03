@@ -4,6 +4,16 @@ import mathjax3 from "markdown-it-mathjax3";
 import ColonBlockPlugin from "./plugins/markdown-it/ColonBlockPlugin";
 import SectionBlockPlugin from "./plugins/markdown-it/HrSectionPlugin";
 
+const builtinThemesStr = "__BUILTIN_THEMES_PLACEHOLDER__";
+let builtinThemes: Record<string, string> = {};
+try {
+  if (builtinThemesStr && !builtinThemesStr.startsWith("__BUILTIN_THEMES_")) {
+    builtinThemes = JSON.parse(builtinThemesStr);
+  }
+} catch (e) {
+  console.error("[SlidesEngine] Failed to parse builtin themes:", e);
+}
+
 interface MetaData {
   title: string;
   header: string;
@@ -109,7 +119,7 @@ function extractTextFromHtml(html: string | null | undefined): string {
 
 function renderTokenChildrenContent(token: any): string {
   if (!token || !token.children) return "";
-  return token.children.map((child: any) => child.content || "").join("");
+  return token.children!.map((child: any) => child.content || "").join("");
 }
 
 function createHtmlBlockToken(state: any, content: string): any {
@@ -446,7 +456,66 @@ export const SlidesEngine = {
 
     markdownText = markdownText.replace(/\r/g, "");
     const { metaText, contentText } = splitMetaSection(markdownText);
-    const env = { metaData: parseMetaSection(metaText) };
+
+    // メタテキストから <style> タグを抽出・除去
+    let stylesContent = "";
+    const styleRegex = /<style>([\s\S]*?)<\/style>/gi;
+    let styleMatch;
+    while ((styleMatch = styleRegex.exec(metaText)) !== null) {
+      stylesContent += styleMatch[1] + "\n";
+    }
+    const cleanMetaText = metaText.replace(styleRegex, "");
+
+    // コメントを保持しつつ、コメント外の@importのみ解決
+    const pattern = /(\/\*[\s\S]*?\*\/)|(@import\s+['"]([^'"]+)['"];?)/gi;
+    stylesContent = stylesContent.replace(
+      pattern,
+      (
+        match: string,
+        comment: string | undefined,
+        importRule: string | undefined,
+        importPath: string | undefined,
+      ): string => {
+        if (comment) {
+          return match;
+        }
+
+        if (importPath) {
+          if (/^https?:\/\//i.test(importPath)) {
+            return match;
+          }
+
+          const cleanPath = importPath
+            .replace(/^(\.\.\/|\.\/)+/, "")
+            .toLowerCase();
+
+          // 1. assets から検索
+          if (assets && assets[cleanPath]) {
+            return assets[cleanPath] || "";
+          }
+
+          // 2. assetsのキー後方一致で検索
+          const assetKeys = Object.keys(assets);
+          for (const key of assetKeys) {
+            if (key.endsWith(cleanPath)) {
+              return assets[key] || "";
+            }
+          }
+
+          // 3. ビルトインテーマから検索
+          if (builtinThemes[importPath]) {
+            return builtinThemes[importPath] || "";
+          }
+          if (builtinThemes[cleanPath]) {
+            return builtinThemes[cleanPath] || "";
+          }
+        }
+
+        return match;
+      },
+    );
+
+    const env = { metaData: parseMetaSection(cleanMetaText) };
     const safeContentText = normalizeHtmlBlockClosures(contentText);
 
     const md = new MarkdownIt({ html: true, linkify: true, typographer: true });
@@ -592,7 +661,22 @@ export const SlidesEngine = {
             );
           }
 
+          // 各ページの tokens から <style> タグを抽出する
+          const pageStyleTokens: any[] = [];
+          for (let i = tokens.length - 1; i >= 0; i--) {
+            const t = tokens[i];
+            if (
+              t &&
+              t.type === "html_block" &&
+              /^\s*<style\b/i.test(t.content)
+            ) {
+              const [styleToken] = tokens.splice(i, 1);
+              pageStyleTokens.unshift(styleToken);
+            }
+          }
+
           const newSectionTokens: any[] = [];
+          newSectionTokens.push(...pageStyleTokens);
           newSectionTokens.push(...headerTokens);
           newSectionTokens.push(
             createHtmlBlockToken(ctx.state, '<div class="content">'),
@@ -657,11 +741,11 @@ export const SlidesEngine = {
         const cleanSrc = markdownSrc
           .replace(/^(\.\.\/|\.\/)+/, "")
           .toLowerCase();
-        if (assets[cleanSrc]) return assets[cleanSrc];
+        if (assets[cleanSrc]) return assets[cleanSrc] || null;
 
         const keys = Object.keys(assets);
         for (const key of keys) {
-          if (key.endsWith(cleanSrc)) return assets[key];
+          if (key.endsWith(cleanSrc)) return assets[key] || null;
         }
         return null;
       };
@@ -676,7 +760,12 @@ export const SlidesEngine = {
       return `<img src="${src}"${attrsHtml} alt="${altText}"${titleAttr}>`;
     };
 
-    const finalHtml = `<div class="slides">\n${md.render(safeContentText, env)}</div>`;
+    let styleTag = "";
+    if (stylesContent.trim()) {
+      styleTag = `<style>\n${stylesContent}\n</style>\n`;
+    }
+
+    const finalHtml = `<div class="slides">\n${styleTag}${md.render(safeContentText, env)}</div>`;
 
     return {
       html: finalHtml,

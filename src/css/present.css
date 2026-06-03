@@ -1,32 +1,37 @@
 /* 💡 プレゼン画面起動時のみ適用されるように限定化 */
-body.present-mode {
-    margin: 0;
-    background: black;
-    overflow: hidden;
-    height: 100vh;
-    display: flex;
-    justify-content: center;
-    align-items: center;
+body {
+  margin: 0;
+  background: transparent;
+  overflow: hidden;
+  height: 100vh;
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  gap: 0 !important;
+}
+
+.page {
+  box-shadow: none;
 }
 
 #present-container {
-    position: relative;
-    width: 1280px;
-    height: 720px;
-    transform-origin: center;
-    background: transparent;
-    overflow: hidden; 
-    scroll-behavior: smooth;
+  position: relative;
+  width: 1280px;
+  height: 720px;
+  transform-origin: center;
+  background: transparent;
+  overflow: hidden;
+  scroll-behavior: smooth;
 }
 
 #fullscreen-hint {
-    position: absolute;
-    bottom: 10px;
-    right: 10px;
-    color: white;
-    opacity: 0.5;
-    font-family: sans-serif;
-    font-size: 12px;
-    cursor: pointer;
-    z-index: 200;
+  position: absolute;
+  bottom: 10px;
+  right: 10px;
+  color: white;
+  opacity: 0.5;
+  font-family: sans-serif;
+  font-size: 12px;
+  cursor: pointer;
+  z-index: 200;
 }
