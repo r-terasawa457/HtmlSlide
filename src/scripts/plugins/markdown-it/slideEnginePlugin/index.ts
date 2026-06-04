@@ -6,10 +6,12 @@ import { VariableReplacer } from "./VariableReplacer.ts";
 
 /**
  * スライド生成に必要な構文解析、構造変形、変数置換の全フェーズを統合するメインプラグイン。
- * 内部で依存するColonBlockPluginの自動有効化も含めてパイプラインをカプセル化する。
+ * 内部で依存するColonBlockPluginの自動有効化も含めてパイプラインをカプセル化します。
+ * * @param md - MarkdownItのインスタンス
  */
 export function slideEnginePlugin(md: MarkdownIt): void {
   md.use(ColonBlockPlugin);
+
   md.core.ruler.push("slide_meta_parser", (state) => {
     const env = state.env as SlideEnv;
 
@@ -26,3 +28,5 @@ export function slideEnginePlugin(md: MarkdownIt): void {
 
   VariableReplacer.inject(md);
 }
+
+export type { SlideEnv } from "./MetaParser";

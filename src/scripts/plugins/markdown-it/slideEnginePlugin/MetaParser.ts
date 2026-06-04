@@ -5,29 +5,37 @@ import { StyleProcessor } from "./StyleProcessor";
 
 /**
  * スライド全体のパースおよびレンダリングに必要なコンテキスト情報。
- * 最初の区切り線より前に定義された共通コンポーネントやアセット、変数を保持する。
+ * 最初の区切り線より前に定義された共通コンポーネントやアセット、変数を保持します。
  */
 export interface SlideEnv {
+  /** スライドのグローバルタイトル */
   title?: string;
+  /** 全ページ共通のヘッダートークン配列 */
   globalHeader?: Token[];
+  /** 全ページ共通のフッタートークン配列 */
   globalFooter?: Token[];
+  /** 解析・展開されたCSSスタイルの配列 */
   themeStyles: string[];
+  /** ユーザー定義変数およびYAMLからパースされたメタデータ */
   variables: Record<string, any>;
+  /** スライドの総ページ数 */
   slideCount: number;
-
-  // 外部から注入されるアセットとテーマの定義
+  /** 外部から注入される画像などのアセット定義（パスとBase64のマップ） */
   assets?: Record<string, string>;
+  /** 外部から注入されるビルトインテーマのCSS定義 */
   builtinThemes?: Record<string, string>;
 }
 
 /**
- * 最初のスライドが開始される前（最初の hr トークンの前）のメタセクションを走査し、
+ * 最初のスライドが開始される前のメタセクションを走査し、
  * タイトル、共通ヘッダー/フッター、CSSスタイル、YAML変数を抽出して描画ストリームから分離するパーサー。
  */
 export class MetaParser {
   /**
-   * トークンストリームの冒頭からメタセクションを特定し、各コンポーネントへ分類した上で、
-   * メタセクションに属するトークンをストリームから完全に除去する。
+   * トークンストリームの冒頭からメタセクションを特定して各コンポーネントへ分類し、
+   * メタセクションに属するトークンをストリームから完全に除去します。
+   * * @param state - markdown-it のコア実行状態
+   * @param env - スライドの環境変数コンテキスト
    */
   public static parse(state: StateCore, env: SlideEnv): void {
     const metaTokens: Token[] = [];
@@ -47,7 +55,6 @@ export class MetaParser {
       }
     }
 
-    // メタセクションが存在しない（hrで区切られていない）場合は処理をスキップ
     if (isMetaSection) {
       return;
     }
@@ -57,10 +64,11 @@ export class MetaParser {
   }
 
   /**
-   * メタセクションから抽出されたトークン群を個々の役割（Style, YAML, Header/Footer/Title）に分類する。
+   * メタセクションから抽出されたトークン群を個々の役割（Style, YAML, Header/Footer/Title）に分類します。
+   * * @param tokens - メタセクションに属するトークンの配列
+   * @param env - スライドの環境変数コンテキスト
    */
   private static classifyMetaTokens(tokens: Token[], env: SlideEnv): void {
-    // タグ判定用の正規表現
     const HEADER_REGEX = /^<header\b/i;
     const FOOTER_REGEX = /^<footer\b/i;
     const STYLE_REGEX = /^<style\b/i;
@@ -69,7 +77,6 @@ export class MetaParser {
     while (i < tokens.length) {
       const token = tokens[i];
 
-      // 1. スタイルシート（<style>）の抽出
       if (
         token?.type === "html_block" &&
         STYLE_REGEX.test(token.content.trim())
@@ -80,28 +87,25 @@ export class MetaParser {
         continue;
       }
 
-      // 2. YAMLブロックによるカスタム変数の抽出
       if (token?.type === "fence" && token.info === "yaml") {
         try {
           const parsedYaml = loadYaml(token.content);
           if (typeof parsedYaml === "object" && parsedYaml !== null) {
             env.variables = { ...env.variables, ...parsedYaml };
           }
-        } catch (e) {
-          // YAMLのパースエラー時は、不正なパッチ当てを防ぐため元のコンテンツを維持するか警告ログに留める
+        } catch {
+          // パース失敗時は状態を維持
         }
         i++;
         continue;
       }
 
-      // 3. ColonBlock によるタイトルの抽出 (例: ::title:: ...)
       if (token?.type === "colon_block" && token.info === "title") {
         env.title = token.content;
         i++;
         continue;
       }
 
-      // 4. 共通ヘッダー・フッターの抽出（コンテナブロックのペアをトークンごと退避）
       if (
         token?.type === "html_block" &&
         HEADER_REGEX.test(token.content.trim())

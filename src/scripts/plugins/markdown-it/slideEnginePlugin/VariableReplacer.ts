@@ -1,17 +1,20 @@
 import MarkdownIt from "markdown-it";
+import Token from "markdown-it/lib/token.mjs";
 import { type SlideEnv } from "./MetaParser";
 
 /**
  * トークンツリーを走査し、ユーザー定義の変数（{% varName %} 形式）を動的に置換するクラス。
+ * インラインテキスト、属性値、およびパース済みのインライン子トークンツリーを再帰的に書き換えます。
  */
 export class VariableReplacer {
   private static readonly VARIABLE_REGEX = /\{%\s*([\w.-]+)\s*%\}/g;
 
   /**
-   * 指定された文字列内の変数プレースホルダーを置換する。
-   * @param text 対象文字列
-   * @param env スライドの環境変数
-   * @param pageNum 現在のページ番号
+   * 指定された文字列内の変数プレースホルダーを置換します。
+   * * @param text - 対象文字列
+   * @param env - スライドの環境変数コンテキスト
+   * @param pageNum - 現在のページ番号
+   * @returns 変数が置換された文字列
    */
   public static replaceString(
     text: string,
@@ -27,7 +30,8 @@ export class VariableReplacer {
   }
 
   /**
-   * markdown-it のコア・ルールに変数を走査・置換するフェーズを注入する。
+   * markdown-it のコア・ルールに変数を走査・置換するフェーズを注入します。
+   * * @param md - MarkdownItのインスタンス
    */
   public static inject(md: MarkdownIt): void {
     md.core.ruler.push("slide_variable_replacer", (state) => {
@@ -50,14 +54,17 @@ export class VariableReplacer {
   }
 
   /**
-   * トークンとその子要素、および属性値に含まれる変数を再帰的に置換する。
+   * トークンとその属性値、およびパース済みのインライン子要素（children）に含まれる変数を再帰的に置換します。
+   * * @param token - 操作対象のTokenインスタンス
+   * @param env - スライドの環境変数コンテキスト
+   * @param pageNum - 現在のページ番号
    */
   private static replaceToken(
-    token: any,
+    token: Token,
     env: SlideEnv,
     pageNum: number,
   ): void {
-    if (typeof token.content === "string") {
+    if (typeof token.content === "string" && token.content) {
       token.content = this.replaceString(token.content, env, pageNum);
     }
 
@@ -76,7 +83,11 @@ export class VariableReplacer {
   }
 
   /**
-   * プレースホルダーに対応する変数の値を env から探索・解決する。
+   * プレースホルダーに対応する変数の値を env から探索・解決します。
+   * * @param pathStr - 置換キーのドット表記パス (例: 'page-number', 'auther.name')
+   * @param env - スライドの環境変数コンテキスト
+   * @param pageNum - 現在のページ番号
+   * @returns 解決された文字列、未定義の場合は null
    */
   private static resolveValue(
     pathStr: string,
@@ -111,7 +122,9 @@ export class VariableReplacer {
   }
 
   /**
-   * 取得した変数の値を適切な文字列に変換する。
+   * 取得した任意のオブジェクトやプリミティブの値を、スペース区切りのフラットな文字列に再帰変換します。
+   * * @param value - 変換対象の値
+   * @returns 文字列化された値
    */
   private static stringifyValue(value: any): string {
     if (value == null) return "";

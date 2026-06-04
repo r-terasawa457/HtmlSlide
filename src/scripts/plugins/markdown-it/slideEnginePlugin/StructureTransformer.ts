@@ -2,20 +2,30 @@ import Token from "markdown-it/lib/token.mjs";
 import StateCore from "markdown-it/lib/rules_core/state_core.mjs";
 import { type SlideEnv } from "./MetaParser";
 
+/**
+ * ページ内のトップレベル要素を分類するためのブロックラッパー。
+ */
 interface TopLevelBlock {
+  /** ブロックのセマンティクス種別 */
   type: "header" | "footer" | "content";
+  /** ブロックを構成するトークン配列 */
   tokens: Token[];
 }
 
 /**
  * フラットなMarkdownトークンストリームを解析し、スライドごとの独立した構造へ再構築するトランスフォーマー。
- * 各ページ内のトップレベルに配置された固有のヘッダー（最初）やフッター（最後）を動的に検出し、
- * 描画コンテキスト（globalHeader/Footer）と差し替えて所定のレイアウト位置へ非破壊的にインジェクションする。
+ * 各ページ内のトップレベルに配置された固有のヘッダーやフッターを動的に検出し、
+ * 描画コンテキスト（globalHeader/Footer）と差し替えて所定のレイアウト位置へ非破壊的にインジェクションします。
  */
 export class StructureTransformer {
+  private static readonly HEADER_REGEX = /^<header\b/i;
+  private static readonly FOOTER_REGEX = /^<footer\b/i;
+
   /**
    * メインのトークン配列をスライド単位に変形し、適切なレイアウトパーツをマッピングした上で
-   * 再びフラットなトークンストリームに再結合してstateを更新する。
+   * 再びフラットなトークンストリームに再結合してstateを更新します。
+   * * @param state - markdown-it のコア実行状態
+   * @param env - スライドの環境変数コンテキスト
    */
   public static transform(state: StateCore, env: SlideEnv): void {
     const pages = this.splitPages(state.tokens);
@@ -32,7 +42,9 @@ export class StructureTransformer {
   }
 
   /**
-   * hrトークンを区切り文字として、トークンストリームをページごとの二次元配列に分割する。
+   * hrトークンを区切り文字として、トークンストリームをページごとの二次元配列に分割します。
+   * * @param tokens - コンテンツセクションの全トークン
+   * @returns ページごとにグループ化されたトークン配列の配列
    */
   private static splitPages(tokens: Token[]): Token[][] {
     const pages: Token[][] = [];
@@ -58,7 +70,12 @@ export class StructureTransformer {
 
   /**
    * 単一ページのスライドトークン群からトップレベルの固有ヘッダー・フッターを分離し、
-   * セクションラッパー、コンテンツコンテナ、および抽出されたパーツを組み合わせて正しいスライド構造を構築する。
+   * セクションラッパー、コンテンツコンテナ、および抽出されたパーツを組み合わせて正しいスライド構造を構築します。
+   * * @param pageTokens - 該当ページに属するトークン配列
+   * @param index - 0始まりのページインデックス
+   * @param state - markdown-it のコア実行状態
+   * @param env - スライドの環境変数コンテキスト
+   * @returns 構造化が完了した該当ページのトークン配列
    */
   private static buildSlidePage(
     pageTokens: Token[],
@@ -76,7 +93,7 @@ export class StructureTransformer {
     const sectionOpen = new state.Token("section_open", "section", 1);
     sectionOpen.block = true;
     sectionOpen.attrs = [
-      ["class", "slide"],
+      ["class", "page"],
       ["id", `slide-${pageNumber}`],
       ["data-page", pageNumber.toString()],
     ];
@@ -118,7 +135,9 @@ export class StructureTransformer {
 
   /**
    * トークンの nesting の累積（深度）を管理し、インラインや子ブロックに内包されていない
-   * 完全なトップレベルのブロック単位（単一のhtml_block、またはコンテナのopenからcloseまで）にグループ化する。
+   * 完全なトップレベルのブロック単位にグループ化します。
+   * * @param tokens - ページのフラットなトークン配列
+   * @returns 種別ごとに分類されたトップレベルブロックの配列
    */
   private static groupTopLevelBlocks(tokens: Token[]): TopLevelBlock[] {
     const blocks: TopLevelBlock[] = [];
@@ -128,15 +147,17 @@ export class StructureTransformer {
 
     for (const token of tokens) {
       if (depth === 0) {
+        const contentTrimmed = token.content ? token.content.trim() : "";
+
         if (
           (token.type === "html_block" &&
-            token.content.startsWith("<header>")) ||
+            this.HEADER_REGEX.test(contentTrimmed)) ||
           token.type === "container_header_open"
         ) {
           currentType = "header";
         } else if (
           (token.type === "html_block" &&
-            token.content.startsWith("<footer")) ||
+            this.FOOTER_REGEX.test(contentTrimmed)) ||
           token.type === "container_footer_open"
         ) {
           currentType = "footer";
@@ -163,7 +184,9 @@ export class StructureTransformer {
 
   /**
    * グループ化されたトップレベルブロック群から、最初に見つかったヘッダーのインデックスと、
-   * 最後に見つかったフッターのインデックスを走査・特定する。
+   * 最後に見つかったフッターのインデックスを走査・特定します。
+   * * @param blocks - トップレベルブロックの配列
+   * @returns 特定されたヘッダーとフッターのインデックスオブジェクト
    */
   private static findTargetLayoutIndices(blocks: TopLevelBlock[]): {
     firstHeaderIdx: number;
@@ -186,16 +209,17 @@ export class StructureTransformer {
 
   /**
    * markdown-itのトークンインスタンスを副作用なく安全に複数ページへマッピングするため、
-   * トークン配列とその子要素（children）を再帰的にディープコピーする。
+   * プロトタイプおよびメタデータを維持しながら参照型プロパティをディープコピーします。
+   * * @param tokens - コピー元のトークン配列
+   * @param state - markdown-it のコア実行状態
+   * @returns コピーされた新しいトークン配列
    */
   private static cloneTokens(tokens: Token[], state: StateCore): Token[] {
     return tokens.map((token) => {
-      const clone = new state.Token(token.type, token.tag, token.nesting);
-      clone.level = token.level;
-      clone.content = token.content;
-      clone.markup = token.markup;
-      clone.info = token.info;
-      clone.block = token.block;
+      const clone = Object.assign(
+        new state.Token(token.type, token.tag, token.nesting),
+        token,
+      );
 
       if (token.attrs) {
         clone.attrs = token.attrs.map((attr) => [...attr] as [string, string]);
