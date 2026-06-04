@@ -1,7 +1,7 @@
 import { describe, test, expect } from "bun:test";
 import Token from "markdown-it/lib/token.mjs";
 import { StructureTransformer } from "../StructureTransformer";
-import { SlideEnv } from "../MetaParser";
+import { type SlideEnv } from "../MetaParser";
 
 /**
  * StructureTransformerクラスによるスライド構造化およびトップレベルパーツの配置ロジックを検証するテストスイート。

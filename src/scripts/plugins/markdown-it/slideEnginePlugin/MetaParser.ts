@@ -1,6 +1,7 @@
 import Token from "markdown-it/lib/token.mjs";
 import StateCore from "markdown-it/lib/rules_core/state_core.mjs";
 import { load as loadYaml } from "js-yaml";
+import { StyleProcessor } from "./StyleProcessor";
 
 /**
  * スライド全体のパースおよびレンダリングに必要なコンテキスト情報。
@@ -13,6 +14,10 @@ export interface SlideEnv {
   themeStyles: string[];
   variables: Record<string, any>;
   slideCount: number;
+
+  // 外部から注入されるアセットとテーマの定義
+  assets?: Record<string, string>;
+  builtinThemes?: Record<string, string>;
 }
 
 /**
@@ -69,7 +74,8 @@ export class MetaParser {
         token?.type === "html_block" &&
         STYLE_REGEX.test(token.content.trim())
       ) {
-        env.themeStyles.push(token.content);
+        const processedCss = StyleProcessor.process(token.content, env);
+        env.themeStyles.push(processedCss);
         i++;
         continue;
       }
