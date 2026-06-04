@@ -55,12 +55,20 @@ export class MetaParser {
    * メタセクションから抽出されたトークン群を個々の役割（Style, YAML, Header/Footer/Title）に分類する。
    */
   private static classifyMetaTokens(tokens: Token[], env: SlideEnv): void {
+    // タグ判定用の正規表現
+    const HEADER_REGEX = /^<header\b/i;
+    const FOOTER_REGEX = /^<footer\b/i;
+    const STYLE_REGEX = /^<style\b/i;
+
     let i = 0;
     while (i < tokens.length) {
       const token = tokens[i];
 
       // 1. スタイルシート（<style>）の抽出
-      if (token?.type === "html_block" && token.content.startsWith("<style>")) {
+      if (
+        token?.type === "html_block" &&
+        STYLE_REGEX.test(token.content.trim())
+      ) {
         env.themeStyles.push(token.content);
         i++;
         continue;
@@ -90,7 +98,7 @@ export class MetaParser {
       // 4. 共通ヘッダー・フッターの抽出（コンテナブロックのペアをトークンごと退避）
       if (
         token?.type === "html_block" &&
-        token.content.startsWith("<header>")
+        HEADER_REGEX.test(token.content.trim())
       ) {
         env.globalHeader = [token];
         i++;
@@ -99,23 +107,21 @@ export class MetaParser {
 
       if (token?.type === "container_footer_open") {
         const footerTokens: Token[] = [];
+        footerTokens.push(token);
+        i++;
+
         while (i < tokens.length) {
           const currentToken = tokens[i];
-          if (!currentToken || currentToken.type === "container_footer_close") {
-            break;
-          }
+          if (!currentToken) break;
+
           footerTokens.push(currentToken);
           i++;
-        }
-        if (i < tokens.length) {
-          const currentToken = tokens[i];
-          if (!currentToken || currentToken.type === "container_footer_close") {
+
+          if (currentToken.type === "container_footer_close") {
             break;
           }
-          footerTokens.push(currentToken); // close トークンを含める
         }
         env.globalFooter = footerTokens;
-        i++;
         continue;
       }
 

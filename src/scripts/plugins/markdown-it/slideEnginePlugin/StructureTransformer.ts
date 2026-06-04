@@ -191,6 +191,7 @@ export class StructureTransformer {
   private static cloneTokens(tokens: Token[], state: StateCore): Token[] {
     return tokens.map((token) => {
       const clone = new state.Token(token.type, token.tag, token.nesting);
+      clone.level = token.level;
       clone.content = token.content;
       clone.markup = token.markup;
       clone.info = token.info;
