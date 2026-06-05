@@ -9,6 +9,52 @@ export class StyleProcessor {
     /(\/\*[\s\S]*?\*\/)|(@import\s+['"]([^'"]+)['"];?)/gi;
 
   /**
+   * CSS文字列全体が @scope で囲まれていない場合、自動的に @scope { ... } で囲みます。
+   * @param css - 対象のCSS文字列
+   * @returns @scope で囲まれたCSS文字列
+   */
+  public static ensureScope(css: string): string {
+    const trimmed = css.trim();
+    if (!trimmed.startsWith("@scope")) {
+      return `@scope {\n${trimmed}\n}`;
+    }
+    return trimmed;
+  }
+
+  /**
+   * CSS文字列を最小化（圧縮）します。
+   * @param css - 対象のCSS文字列
+   * @returns 最小化されたCSS文字列
+   */
+  public static minimizeCss(css: string): string {
+    return css
+      .replace(/\/\*[\s\S]*?\*\//g, "")
+      .replace(/\s+/g, " ")
+      .replace(/\s*([{}|:;])\s*/g, "$1")
+      .trim();
+  }
+
+  /**
+   * <style>タグ内のCSS文字列を抽出し、@scope で囲まれていない場合は自動的に囲んだ形式に変換し、さらに最小化します。
+   * @param styleContent - <style>...</style> 形式のHTML文字列
+   * @returns 最小化および@scope化されたHTML文字列
+   */
+  public static wrapStyleTagWithScope(styleContent: string): string {
+    const trimmed = styleContent.trim();
+    const innerCssMatch = trimmed.match(/^<style\b[^>]*>([\s\S]*?)<\/style>/i);
+    if (!innerCssMatch) {
+      return trimmed;
+    }
+    const innerCss = (innerCssMatch[1] ?? "").trim();
+    const processedCss = this.ensureScope(innerCss);
+    const minimizedCss = this.minimizeCss(processedCss);
+
+    const openTagMatch = trimmed.match(/^(<style\b[^>]*>)/i);
+    const openTag = openTagMatch?.[1] ?? "<style>";
+    return `${openTag}${minimizedCss}</style>`;
+  }
+
+  /**
    * 指定されたCSSテキスト内の @import ルールを env のアセット定義に基づいて解決します。
    * * @param cssText - 置換対象 of CSS文字列
    * @param env - スライドの環境変数コンテキスト

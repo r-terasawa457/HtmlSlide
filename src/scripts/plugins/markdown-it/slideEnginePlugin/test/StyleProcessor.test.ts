@@ -128,4 +128,27 @@ describe("StyleProcessor", () => {
     expect(matches).not.toBeNull();
     expect(matches!.length).toBe(1);
   });
+
+  test("should ensureScope wraps CSS with @scope if not present", () => {
+    const css = ".test { color: red; }";
+    const result = StyleProcessor.ensureScope(css);
+    expect(result).toBe("@scope {\n.test { color: red; }\n}");
+  });
+
+  test("should minimizeCss removes spaces and comments", () => {
+    const css = `
+      /* test comment */
+      .test {
+        color: red;
+      }
+    `;
+    const result = StyleProcessor.minimizeCss(css);
+    expect(result).toBe(".test{color:red;}");
+  });
+
+  test("should wrapStyleTagWithScope correctly scopes and minimizes style tag content", () => {
+    const html = "<style>.test { color: red; }</style>";
+    const result = StyleProcessor.wrapStyleTagWithScope(html);
+    expect(result).toBe("<style>@scope{.test{color:red;}}</style>");
+  });
 });
