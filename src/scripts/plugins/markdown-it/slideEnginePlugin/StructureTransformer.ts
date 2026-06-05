@@ -38,6 +38,14 @@ export class StructureTransformer {
       );
     });
 
+    if (env.themeStyles && env.themeStyles.length > 0) {
+      const combinedCss = env.themeStyles.join("\n");
+      const scopedCss = this.ensureScope(combinedCss);
+      const styleToken = new state.Token("html_block", "", 0);
+      styleToken.content = `<style>${scopedCss}</style>`;
+      transformedTokens.unshift(styleToken);
+    }
+
     state.tokens = transformedTokens;
   }
 
@@ -51,7 +59,7 @@ export class StructureTransformer {
     let currentPage: Token[] = [];
 
     for (const token of tokens) {
-      if (token.type === "hr") {
+      if (token.type === "hr" && token.level === 0) {
         if (currentPage.length > 0) {
           pages.push(currentPage);
           currentPage = [];
@@ -96,6 +104,7 @@ export class StructureTransformer {
         token.type === "html_block" &&
         STYLE_REGEX.test(token.content.trim())
       ) {
+        token.content = this.wrapStyleTagWithScope(token.content);
         styleTokens.push(token);
       } else {
         remainingTokens.push(token);
@@ -240,5 +249,51 @@ export class StructureTransformer {
 
       return clone;
     });
+  }
+
+  /**
+   * CSS文字列全体が @scope で囲まれていない場合、自動的に @scope { ... } で囲みます。
+   * @param css - 対象のCSS文字列
+   * @returns @scope で囲まれたCSS文字列
+   */
+  private static ensureScope(css: string): string {
+    const trimmed = css.trim();
+    if (!trimmed.startsWith("@scope")) {
+      return `@scope {\n${trimmed}\n}`;
+    }
+    return trimmed;
+  }
+
+  /**
+   * CSS文字列を最小化（圧縮）します。
+   * @param css - 対象のCSS文字列
+   * @returns 最小化されたCSS文字列
+   */
+  private static minimizeCss(css: string): string {
+    return css
+      .replace(/\/\*[\s\S]*?\*\//g, "") // コメントの削除
+      .replace(/\s+/g, " ") // 連続する空白・改行を単一スペース化
+      .replace(/\s*([{}|:;])\s*/g, "$1") // 記号の周囲の空白を削除
+      .trim();
+  }
+
+  /**
+   * <style>タグ内のCSS文字列を抽出し、@scope で囲まれていない場合は自動的に囲んだ形式に変換し、さらに最小化します。
+   * @param styleContent - <style>...</style> 形式のHTML文字列
+   * @returns 最小化および@scope化されたHTML文字列
+   */
+  private static wrapStyleTagWithScope(styleContent: string): string {
+    const trimmed = styleContent.trim();
+    const innerCssMatch = trimmed.match(/^<style\b[^>]*>([\s\S]*?)<\/style>/i);
+    if (!innerCssMatch) {
+      return trimmed;
+    }
+    const innerCss = (innerCssMatch[1] ?? "").trim();
+    const processedCss = this.ensureScope(innerCss);
+    const minimizedCss = this.minimizeCss(processedCss);
+
+    const openTagMatch = trimmed.match(/^(<style\b[^>]*>)/i);
+    const openTag = openTagMatch?.[1] ?? "<style>";
+    return `${openTag}${minimizedCss}</style>`;
   }
 }

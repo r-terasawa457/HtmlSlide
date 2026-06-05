@@ -189,13 +189,7 @@ export const SlidesEngine = {
     };
 
     const renderedHtml = md.render(normalizedMarkdown, env);
-
-    let styleTag = "";
-    if (env.themeStyles.length > 0) {
-      styleTag = `<style>\n${env.themeStyles.join("\n")}\n</style>\n`;
-    }
-
-    const finalHtml = `<div class="slides">\n${styleTag}${renderedHtml}</div>`;
+    const finalHtml = `<div class="slides">${renderedHtml}</div>`;
 
     return {
       html: finalHtml,
