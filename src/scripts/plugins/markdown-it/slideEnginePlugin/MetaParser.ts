@@ -71,7 +71,7 @@ export class MetaParser {
     let isMetaSection = true;
 
     for (const token of state.tokens) {
-      if (isMetaSection && token.type === "hr") {
+      if (isMetaSection && token.type === "hr" && token.level === 0) {
         isMetaSection = false;
         continue;
       }

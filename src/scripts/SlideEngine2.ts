@@ -147,39 +147,6 @@ export const SlidesEngine = {
       return `<pre><code class="hljs language-plaintext">${highlighted}</code></pre>\n`;
     };
 
-    md.renderer.rules.image = (tokens, idx) => {
-      const token = tokens[idx];
-      if (!token) return "";
-
-      let src = token.attrGet("src") || "";
-      const title = token.attrGet("title") || "";
-      const rawAlt = renderTokenChildrenContent(token).trim();
-      const rawAttrStr = `${rawAlt} img-fluid`.trim();
-      const attrsHtml = parseAttributes(rawAttrStr, "class");
-
-      const findMatchingAsset = (markdownSrc: string): string | null => {
-        const cleanSrc = markdownSrc
-          .replace(/^(\.\.\/|\.\/)+/, "")
-          .toLowerCase();
-        if (assets[cleanSrc]) return assets[cleanSrc];
-
-        const keys = Object.keys(assets);
-        for (const key of keys) {
-          if (key.endsWith(cleanSrc)) return assets[key];
-        }
-        return null;
-      };
-
-      const matchedAsset = findMatchingAsset(src);
-      if (matchedAsset) src = matchedAsset;
-
-      let altText = "";
-      if (title) altText = `${title.trim()}の画像`;
-
-      const titleAttr = title ? ` title="${title.trim()}"` : "";
-      return `<img src="${src}"${attrsHtml} alt="${altText}"${titleAttr}>`;
-    };
-
     const env: SlideEnv = {
       themeStyles: [],
       variables: {},
