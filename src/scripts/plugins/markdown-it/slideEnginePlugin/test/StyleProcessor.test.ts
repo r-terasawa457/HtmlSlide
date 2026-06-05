@@ -66,4 +66,66 @@ describe("StyleProcessor", () => {
 
     expect(result).toBe(`@import "css/unknown-file.css";`);
   });
+
+  test("should recursively resolve nested @import rules (A -> B -> C)", () => {
+    const envWithNested: SlideEnv = {
+      themeStyles: [],
+      variables: {},
+      slideCount: 0,
+      builtinThemes: {
+        "theme-a.css": `@import "theme-b.css";\n/* Body of A */`,
+        "theme-b.css": `@import "theme-c.css";\n/* Body of B */`,
+        "theme-c.css": `/* Body of C */`,
+      },
+    };
+
+    const rawCss = `@import "theme-a.css";`;
+    const result = StyleProcessor.process(rawCss, envWithNested);
+
+    expect(result).toContain("/* Body of C */");
+    expect(result).toContain("/* Body of B */");
+    expect(result).toContain("/* Body of A */");
+  });
+
+  test("should prevent infinite loops from circular @import rules (A -> B -> A)", () => {
+    const envWithCircular: SlideEnv = {
+      themeStyles: [],
+      variables: {},
+      slideCount: 0,
+      builtinThemes: {
+        "theme-a.css": `@import "theme-b.css";\n/* Body of A */`,
+        "theme-b.css": `@import "theme-a.css";\n/* Body of B */`,
+      },
+    };
+
+    const rawCss = `@import "theme-a.css";`;
+    // If it handles circular loops correctly, it won't crash with Stack Overflow
+    const result = StyleProcessor.process(rawCss, envWithCircular);
+
+    // The second theme-a.css import in theme-b should be skipped/ignored (empty string)
+    expect(result).toContain("/* Body of B */");
+    expect(result).toContain("/* Body of A */");
+  });
+
+  test("should eliminate duplicate imports of the same file (A imports B and C, both B and C import D)", () => {
+    const envWithDuplicates: SlideEnv = {
+      themeStyles: [],
+      variables: {},
+      slideCount: 0,
+      builtinThemes: {
+        "theme-a.css": `@import "theme-b.css";\n@import "theme-c.css";`,
+        "theme-b.css": `@import "theme-d.css";\n/* Body of B */`,
+        "theme-c.css": `@import "theme-d.css";\n/* Body of C */`,
+        "theme-d.css": `/* Body of D */`,
+      },
+    };
+
+    const rawCss = `@import "theme-a.css";`;
+    const result = StyleProcessor.process(rawCss, envWithDuplicates);
+
+    // Body of D should appear exactly once
+    const matches = result.match(/\/\* Body of D \*\//g);
+    expect(matches).not.toBeNull();
+    expect(matches!.length).toBe(1);
+  });
 });

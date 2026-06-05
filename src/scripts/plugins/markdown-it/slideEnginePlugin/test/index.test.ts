@@ -41,15 +41,13 @@ describe("slideEnginePlugin", () => {
 
     expect(env.title).toBe("データベース特論");
     expect(env.variables).toEqual({ author: { name: "Ryuki Terasawa" } });
-    expect(env.themeStyles).toContain("section { background: #000; }\n");
+    expect(env.themeStyles[0]).toContain("section { background: #000; }");
     expect(env.slideCount).toBe(1);
 
     expect(html).not.toContain("```yaml");
     expect(html).not.toContain("::title::");
-    expect(html).toContain(
-      '<section class="slide" id="slide-1" data-page="1">',
-    );
-    expect(html).toContain('<div class="slide-content">');
+    expect(html).toContain('<section class="page" id="slide-1" data-page="1">');
+    expect(html).toContain('<div class="content">');
     expect(html).toContain("<h2>ページ1の本文</h2>");
   });
 
@@ -117,11 +115,11 @@ describe("slideEnginePlugin", () => {
 
     // markdown-it が生成する仕様通りの改行コード（\n）を期待値に反映
     expect(html).toContain(
-      '<section class="slide" id="slide-1" data-page="1">\n<header>グローバル共通</header>\n<div class="slide-content">',
+      '<section class="page" id="slide-1" data-page="1">\n<header>グローバル共通</header>\n<div class="content">',
     );
 
     expect(html).toContain(
-      '<section class="slide" id="slide-2" data-page="2">\n<header>個別優先ヘッダー</header>\n<div class="slide-content">',
+      '<section class="page" id="slide-2" data-page="2">\n<header>個別優先ヘッダー</header>\n<div class="content">',
     );
   });
 
@@ -134,10 +132,8 @@ describe("slideEnginePlugin", () => {
     const html = md.render(src, env);
 
     expect(env.slideCount).toBe(1);
-    expect(html).toContain(
-      '<section class="slide" id="slide-1" data-page="1">',
-    );
-    expect(html).toContain('<div class="slide-content">');
+    expect(html).toContain('<section class="page" id="slide-1" data-page="1">');
+    expect(html).toContain('<div class="content">');
     expect(html).toContain("<h2>メタデータのないスライド</h2>");
   });
 

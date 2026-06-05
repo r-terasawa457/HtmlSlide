@@ -34,9 +34,7 @@ describe("MetaParser", () => {
     MetaParser.parse(state, env);
 
     expect(env.variables).toEqual({ author: { name: "tarou" }, gender: "man" });
-    expect(env.themeStyles).toContain(
-      '<style>\n@import "css/vs.css";\n</style>',
-    );
+    expect(env.themeStyles).toContain('\n@import "css/vs.css";\n');
     expect(state.tokens.length).toBe(1);
     expect(state.tokens[0].type).toBe("paragraph_open");
   });

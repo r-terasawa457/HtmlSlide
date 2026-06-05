@@ -107,7 +107,7 @@ export class StructureTransformer {
 
     const contentOpen = new state.Token("div_open", "div", 1);
     contentOpen.block = true;
-    contentOpen.attrs = [["class", "slide-content"]];
+    contentOpen.attrs = [["class", "content"]];
     slidePage.push(contentOpen);
 
     topLevelBlocks.forEach((block, idx) => {

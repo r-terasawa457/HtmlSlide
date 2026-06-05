@@ -81,7 +81,10 @@ export class MetaParser {
         token?.type === "html_block" &&
         STYLE_REGEX.test(token.content.trim())
       ) {
-        const processedCss = StyleProcessor.process(token.content, env);
+        const innerCss = token.content
+          .replace(/<style\b[^>]*>/i, "")
+          .replace(/<\/style>/i, "");
+        const processedCss = StyleProcessor.process(innerCss, env);
         env.themeStyles.push(processedCss);
         i++;
         continue;
@@ -100,8 +103,18 @@ export class MetaParser {
         continue;
       }
 
-      if (token?.type === "colon_block" && token.info === "title") {
-        env.title = token.content;
+      if (token?.type === "colon_block_open" && token.tag === "title") {
+        const nextToken = tokens[i + 1];
+        if (nextToken && nextToken.type === "inline") {
+          env.title = nextToken.content.trim();
+        }
+        while (i < tokens.length) {
+          const currentToken = tokens[i];
+          if (currentToken && currentToken.type === "colon_block_close") {
+            break;
+          }
+          i++;
+        }
         i++;
         continue;
       }
