@@ -41,4 +41,21 @@ describe("VariableReplacer", () => {
     const html = md.render("Welcome to {% title %}", env);
     expect(html).toContain("Welcome to Database Lecture");
   });
+
+  /**
+   * 置換後のテキストにMarkdown構文が含まれている場合に、インライン再パースされることを検証する。
+   */
+  test("should re-parse inline content if the replaced text contains markdown syntax", () => {
+    const md = new MarkdownIt();
+    VariableReplacer.inject(md);
+
+    const env: SlideEnv = {
+      variables: { formatted: "**bold text** and *italic*" },
+      themeStyles: [],
+      slideCount: 0,
+    };
+
+    const html = md.render("This is {% formatted %}", env);
+    expect(html).toContain("<strong>bold text</strong> and <em>italic</em>");
+  });
 });

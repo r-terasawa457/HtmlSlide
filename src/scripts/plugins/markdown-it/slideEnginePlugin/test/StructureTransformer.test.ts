@@ -47,20 +47,25 @@ describe("StructureTransformer", () => {
     const footerToken = new Token("html_block", "", 0);
     footerToken.content = '<footer class="low">Page Footer</footer>';
 
+    const pageStyleToken = new Token("html_block", "", 0);
+    pageStyleToken.content = "<style>.page-only { color: red; }</style>";
+
     const state = {
-      tokens: [headerToken, pOpen, pClose, footerToken],
+      tokens: [headerToken, pageStyleToken, pOpen, pClose, footerToken],
       Token: Token,
     } as any;
 
     StructureTransformer.transform(state, env);
 
     expect(state.tokens[0].type).toBe("section_open");
-    expect(state.tokens[1]).toBe(headerToken);
-    expect(state.tokens[2].type).toBe("div_open");
-    expect(state.tokens[3]).toBe(pOpen);
-    expect(state.tokens[4]).toBe(pClose);
-    expect(state.tokens[5].type).toBe("div_close");
-    expect(state.tokens[6]).toBe(footerToken);
-    expect(state.tokens[7].type).toBe("section_close");
+    // pageStyleToken should be extracted and placed at index 1 (the very top of the page elements, before header)
+    expect(state.tokens[1]).toBe(pageStyleToken);
+    expect(state.tokens[2]).toBe(headerToken);
+    expect(state.tokens[3].type).toBe("div_open");
+    expect(state.tokens[4]).toBe(pOpen);
+    expect(state.tokens[5]).toBe(pClose);
+    expect(state.tokens[6].type).toBe("div_close");
+    expect(state.tokens[7]).toBe(footerToken);
+    expect(state.tokens[8].type).toBe("section_close");
   });
 });

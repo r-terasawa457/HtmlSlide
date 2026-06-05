@@ -1,6 +1,6 @@
 import Token from "markdown-it/lib/token.mjs";
 import StateCore from "markdown-it/lib/rules_core/state_core.mjs";
-import { type SlideEnv } from "./MetaParser";
+import { type SlideEnv, isHeaderToken, isFooterToken } from "./MetaParser";
 
 /**
  * ページ内のトップレベル要素を分類するためのブロックラッパー。
@@ -86,7 +86,23 @@ export class StructureTransformer {
     const slidePage: Token[] = [];
     const pageNumber = index + 1;
 
-    const topLevelBlocks = this.groupTopLevelBlocks(pageTokens);
+    // ページ固有の <style> トークンを走査して抽出する
+    const styleTokens: Token[] = [];
+    const STYLE_REGEX = /^<style\b/i;
+    const remainingTokens: Token[] = [];
+
+    for (const token of pageTokens) {
+      if (
+        token.type === "html_block" &&
+        STYLE_REGEX.test(token.content.trim())
+      ) {
+        styleTokens.push(token);
+      } else {
+        remainingTokens.push(token);
+      }
+    }
+
+    const topLevelBlocks = this.groupTopLevelBlocks(remainingTokens);
     const { firstHeaderIdx, lastFooterIdx } =
       this.findTargetLayoutIndices(topLevelBlocks);
 
@@ -98,6 +114,9 @@ export class StructureTransformer {
       ["data-page", pageNumber.toString()],
     ];
     slidePage.push(sectionOpen);
+
+    // 抽出した <style> を header や div.content よりも前のページの最先頭に配置
+    slidePage.push(...styleTokens);
 
     if (firstHeaderIdx !== -1) {
       slidePage.push(...(topLevelBlocks[firstHeaderIdx]?.tokens ?? []));
@@ -147,19 +166,9 @@ export class StructureTransformer {
 
     for (const token of tokens) {
       if (depth === 0) {
-        const contentTrimmed = token.content ? token.content.trim() : "";
-
-        if (
-          (token.type === "html_block" &&
-            this.HEADER_REGEX.test(contentTrimmed)) ||
-          token.type === "container_header_open"
-        ) {
+        if (isHeaderToken(token)) {
           currentType = "header";
-        } else if (
-          (token.type === "html_block" &&
-            this.FOOTER_REGEX.test(contentTrimmed)) ||
-          token.type === "container_footer_open"
-        ) {
+        } else if (isFooterToken(token)) {
           currentType = "footer";
         } else {
           currentType = "content";

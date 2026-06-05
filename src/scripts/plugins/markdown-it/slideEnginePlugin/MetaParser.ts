@@ -4,6 +4,34 @@ import { load as loadYaml } from "js-yaml";
 import { StyleProcessor } from "./StyleProcessor";
 
 /**
+ * トークンがヘッダー要素かどうかを判定します。
+ * * @param token - 判定対象のToken
+ */
+export function isHeaderToken(token: Token): boolean {
+  if (!token) return false;
+  const contentTrimmed = token.content ? token.content.trim() : "";
+  return (
+    (token.type === "html_block" && /^<header\b/i.test(contentTrimmed)) ||
+    token.type === "container_header_open" ||
+    (token.type === "colon_block_open" && token.tag === "header")
+  );
+}
+
+/**
+ * トークンがフッター要素かどうかを判定します。
+ * * @param token - 判定対象のToken
+ */
+export function isFooterToken(token: Token): boolean {
+  if (!token) return false;
+  const contentTrimmed = token.content ? token.content.trim() : "";
+  return (
+    (token.type === "html_block" && /^<footer\b/i.test(contentTrimmed)) ||
+    token.type === "container_footer_open" ||
+    (token.type === "colon_block_open" && token.tag === "footer")
+  );
+}
+
+/**
  * スライド全体のパースおよびレンダリングに必要なコンテキスト情報。
  * 最初の区切り線より前に定義された共通コンポーネントやアセット、変数を保持します。
  */
@@ -69,16 +97,18 @@ export class MetaParser {
    * @param env - スライドの環境変数コンテキスト
    */
   private static classifyMetaTokens(tokens: Token[], env: SlideEnv): void {
-    const HEADER_REGEX = /^<header\b/i;
-    const FOOTER_REGEX = /^<footer\b/i;
     const STYLE_REGEX = /^<style\b/i;
 
     let i = 0;
     while (i < tokens.length) {
       const token = tokens[i];
+      if (!token) {
+        i++;
+        continue;
+      }
 
       if (
-        token?.type === "html_block" &&
+        token.type === "html_block" &&
         STYLE_REGEX.test(token.content.trim())
       ) {
         const innerCss = token.content
@@ -90,7 +120,7 @@ export class MetaParser {
         continue;
       }
 
-      if (token?.type === "fence" && token.info === "yaml") {
+      if (token.type === "fence" && token.info === "yaml") {
         try {
           const parsedYaml = loadYaml(token.content);
           if (typeof parsedYaml === "object" && parsedYaml !== null) {
@@ -103,7 +133,7 @@ export class MetaParser {
         continue;
       }
 
-      if (token?.type === "colon_block_open" && token.tag === "title") {
+      if (token.type === "colon_block_open" && token.tag === "title") {
         const nextToken = tokens[i + 1];
         if (nextToken && nextToken.type === "inline") {
           env.title = nextToken.content.trim();
@@ -119,30 +149,39 @@ export class MetaParser {
         continue;
       }
 
-      if (
-        token?.type === "html_block" &&
-        HEADER_REGEX.test(token.content.trim())
-      ) {
-        env.globalHeader = [token];
-        i++;
+      if (isHeaderToken(token)) {
+        const headerTokens: Token[] = [token];
+        if (token.nesting > 0) {
+          let depth = token.nesting;
+          i++;
+          while (i < tokens.length && depth > 0) {
+            const currentToken = tokens[i];
+            if (!currentToken) break;
+            headerTokens.push(currentToken);
+            depth += currentToken.nesting;
+            i++;
+          }
+        } else {
+          i++;
+        }
+        env.globalHeader = headerTokens;
         continue;
       }
 
-      if (token?.type === "container_footer_open") {
-        const footerTokens: Token[] = [];
-        footerTokens.push(token);
-        i++;
-
-        while (i < tokens.length) {
-          const currentToken = tokens[i];
-          if (!currentToken) break;
-
-          footerTokens.push(currentToken);
+      if (isFooterToken(token)) {
+        const footerTokens: Token[] = [token];
+        if (token.nesting > 0) {
+          let depth = token.nesting;
           i++;
-
-          if (currentToken.type === "container_footer_close") {
-            break;
+          while (i < tokens.length && depth > 0) {
+            const currentToken = tokens[i];
+            if (!currentToken) break;
+            footerTokens.push(currentToken);
+            depth += currentToken.nesting;
+            i++;
           }
+        } else {
+          i++;
         }
         env.globalFooter = footerTokens;
         continue;

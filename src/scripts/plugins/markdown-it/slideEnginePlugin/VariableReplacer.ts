@@ -48,7 +48,7 @@ export class VariableReplacer {
           }
         }
 
-        this.replaceToken(token, env, currentPageNum);
+        this.replaceToken(token, env, currentPageNum, md, state);
       }
     });
   }
@@ -58,12 +58,17 @@ export class VariableReplacer {
    * * @param token - 操作対象のTokenインスタンス
    * @param env - スライドの環境変数コンテキスト
    * @param pageNum - 現在のページ番号
+   * @param md - MarkdownItのインスタンス
+   * @param state - markdown-it のコア実行状態
    */
   private static replaceToken(
     token: Token,
     env: SlideEnv,
     pageNum: number,
+    md: MarkdownIt,
+    state: any,
   ): void {
+    const originalContent = token.content;
     if (typeof token.content === "string" && token.content) {
       token.content = this.replaceString(token.content, env, pageNum);
     }
@@ -75,9 +80,17 @@ export class VariableReplacer {
       ]);
     }
 
-    if (token.children) {
+    if (token.type === "inline" && token.content !== originalContent) {
+      const parsed = md.parseInline(token.content, state.env);
+      const firstToken = parsed[0];
+      if (firstToken && firstToken.children) {
+        token.children = firstToken.children;
+      } else {
+        token.children = parsed;
+      }
+    } else if (token.children) {
       for (const child of token.children) {
-        this.replaceToken(child, env, pageNum);
+        this.replaceToken(child, env, pageNum, md, state);
       }
     }
   }

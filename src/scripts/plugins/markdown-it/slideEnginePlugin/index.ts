@@ -18,11 +18,17 @@ export function slideEnginePlugin(md: MarkdownIt): void {
     if (!env.variables) env.variables = {};
     if (!env.themeStyles) env.themeStyles = [];
 
+    if ((env as any).__metaParsed) return;
+    (env as any).__metaParsed = true;
+
     MetaParser.parse(state, env);
   });
 
   md.core.ruler.push("slide_structure_transformer", (state) => {
     const env = state.env as SlideEnv;
+    if ((env as any).__structured) return;
+    (env as any).__structured = true;
+
     StructureTransformer.transform(state, env);
   });
 
