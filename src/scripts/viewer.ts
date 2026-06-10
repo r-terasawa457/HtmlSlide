@@ -294,7 +294,7 @@ export async function setupViewer(slidesHtml: string): Promise<void> {
           await AssetProvider.resolveScriptTag("dist/pptxExport.js");
         const pptxExportHtml = pptxExportTemplate.replace(
           "<!-- EXPORT_SCRIPT_TAG -->",
-          pptxExportScript,
+          () => pptxExportScript,
         );
         exportIframe.srcdoc = pptxExportHtml;
 

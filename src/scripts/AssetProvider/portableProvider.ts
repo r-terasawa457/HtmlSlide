@@ -54,8 +54,8 @@ export const portableProvider: IAssetProvider = {
     const presenterScript = `<script type="module">${getEmbeddedAsset("dist/presenter.js")}</script>`;
 
     const presenterHtml = presenterTemplate
-      .replace("<!-- PRESENTER_STYLE_TAG -->", presenterStyle)
-      .replace("<!-- PRESENTER_SCRIPT_TAG -->", presenterScript);
+      .replace("<!-- PRESENTER_STYLE_TAG -->", () => presenterStyle)
+      .replace("<!-- PRESENTER_SCRIPT_TAG -->", () => presenterScript);
 
     const blob = new Blob([presenterHtml], { type: "text/html" });
     return URL.createObjectURL(blob);
