@@ -119,9 +119,27 @@ function setupDragAndDrop(): void {
       let mdContent = "";
       let mdTitle = "";
 
+      // ドロップされたMarkdownの階層を基準（ベースプレフィックス）として抽出
+      let basePrefix = "";
+      const mdDropped = droppedFiles.find((d) => d.file.name.endsWith(".md"));
+      if (mdDropped) {
+        const lastSlash = mdDropped.relativePath.lastIndexOf("/");
+        if (lastSlash >= 0) {
+          basePrefix = mdDropped.relativePath
+            .substring(0, lastSlash + 1)
+            .toLowerCase();
+        }
+      }
+
       for (const dropped of droppedFiles) {
         const { relativePath, file } = dropped;
-        const key = relativePath.toLowerCase();
+
+        // Markdownからの相対パスに統一するためベースプレフィックスを除去
+        let key = relativePath.toLowerCase();
+        if (basePrefix && key.startsWith(basePrefix)) {
+          key = key.substring(basePrefix.length);
+        }
+        key = key.replace(/^\.\//, "");
 
         if (file.name.endsWith(".md")) {
           if (mdContent) {

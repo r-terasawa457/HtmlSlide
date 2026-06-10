@@ -2,11 +2,11 @@ import type { IAssetProvider } from "./types";
 
 export const httpProvider: IAssetProvider = {
   async resolveAssetUrl(path: string): Promise<string> {
-    return "/" + path;
+    return `${window.location.origin}/${path}`;
   },
 
   async resolveStyleTag(path: string): Promise<string> {
-    return `<link rel="stylesheet" href="/${path}" />`;
+    return `<link rel="stylesheet" href="${window.location.origin}/${path}" />`;
   },
 
   async resolveThemeCss(name: string): Promise<string> {
@@ -26,10 +26,23 @@ export const httpProvider: IAssetProvider = {
   },
 
   async resolveScriptTag(path: string): Promise<string> {
-    return `<script type="module" src="/${path}"></script>`;
+    return `<script type="module" src="${window.location.origin}/${path}"></script>`;
   },
 
   async resolvePresenterUrl(): Promise<string> {
-    return "/presenter.html";
+    const presenterTemplate =
+      await httpProvider.resolveAssetContent("src/presenter.html");
+    const presenterStyle = await httpProvider.resolveStyleTag(
+      "src/css/presenter.css",
+    );
+    const presenterScript =
+      await httpProvider.resolveScriptTag("dist/presenter.js");
+
+    const presenterHtml = presenterTemplate
+      .replace("", () => presenterStyle)
+      .replace("", () => presenterScript);
+
+    const blob = new Blob([presenterHtml], { type: "text/html" });
+    return URL.createObjectURL(blob);
   },
 };

@@ -117,16 +117,6 @@ Bun.serve({
       }
     }
 
-    if (pathname === "/presenter.html") {
-      const file = Bun.file("./src/presenter.html");
-      if (await file.exists()) return new Response(file);
-    }
-
-    if (pathname === "/pptx_export.html") {
-      const file = Bun.file("./src/pptx_export.html");
-      if (await file.exists()) return new Response(file);
-    }
-
     let file = Bun.file(join(".", pathname));
     if (await file.exists()) return new Response(file);
 
