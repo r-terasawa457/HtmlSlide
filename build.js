@@ -72,14 +72,12 @@ try {
     ).text(),
   };
 
-  // HTMLパースを崩壊させないよう </script> を安全にエスケープして埋め込む
-  const jsonStr = JSON.stringify(EmbeddedAssets).replace(
-    /<\/script>/gi,
-    "<\\/script>",
-  );
+  const jsonStr = JSON.stringify(EmbeddedAssets);
 
   // compiledMainJs の先頭に EmbeddedAssets を定義して流し込む
   compiledMainJs = `globalThis.EmbeddedAssets = ${jsonStr};\n` + compiledMainJs;
+  // HTMLパースを崩壊させないよう、すべてのHTML閉じタグを安全にエスケープして埋め込む
+  compiledMainJs = compiledMainJs.replace(/<\/([a-zA-Z]+)>/gi, "<\\/$1>");
 
   // 6. index.html へのメインアセットのインライン結合
   function inlineAssets(htmlTemplate, cssContent, jsContent) {
