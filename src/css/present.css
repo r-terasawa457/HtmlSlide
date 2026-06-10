@@ -16,8 +16,8 @@ body {
 
 #present-container {
   position: relative;
-  width: 1280px;
-  height: 720px;
+  width: 960pt;
+  height: 540pt;
   transform-origin: center;
   background: transparent;
   overflow: hidden;
