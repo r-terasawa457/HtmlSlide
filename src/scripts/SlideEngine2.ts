@@ -6,16 +6,6 @@ import {
   type SlideEnv,
 } from "./plugins/markdown-it/slideEnginePlugin";
 
-const builtinThemesStr = "__BUILTIN_THEMES_PLACEHOLDER__";
-let builtinThemes: Record<string, string> = {};
-try {
-  if (builtinThemesStr && !builtinThemesStr.startsWith("__BUILTIN_THEMES_")) {
-    builtinThemes = JSON.parse(builtinThemesStr);
-  }
-} catch (e) {
-  console.error("[SlidesEngine2] Failed to parse builtin themes:", e);
-}
-
 export interface SlidesEngineResult {
   html: string;
   title: string;
@@ -108,6 +98,7 @@ export const SlidesEngine = {
   run(
     markdownText: string,
     assets: Record<string, string> = {},
+    builtinThemes: Record<string, string> = {},
   ): SlidesEngineResult {
     if (!markdownText) {
       return {

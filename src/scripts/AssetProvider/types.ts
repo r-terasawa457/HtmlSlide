@@ -1,0 +1,45 @@
+/**
+ * 各実行環境におけるシステムアセットの調達・解決を行うプロバイダーのインターフェース
+ */
+export interface IAssetProvider {
+  /**
+   * 指定された静的アセットパスを、現在の環境でブラウザが解釈可能なURLに解決する
+   * @param path - 静的アセットの相対パス
+   * @returns ブラウザで直接利用可能なURL文字列のPromise
+   */
+  resolveAssetUrl(path: string): Promise<string>;
+
+  /**
+   * 指定されたCSSファイルを、現在の環境に最適なHTMLタグ形式に解決する
+   * @param path - スタイルシートの相対パス
+   * @returns 展開可能なHTMLタグ文字列のPromise
+   */
+  resolveStyleTag(path: string): Promise<string>;
+
+  /**
+   * 指定されたテーマCSSの生テキスト内容を解決する
+   * @param name - テーマ名、またはテーマファイルのパス
+   * @returns CSS of 生テキスト内容のPromise
+   */
+  resolveThemeCss(name: string): Promise<string>;
+
+  /**
+   * 指定された静的アセットのテキスト内容を直接解決する
+   * @param path - 静的アセットの相対パス
+   * @returns テキスト内容のPromise
+   */
+  resolveAssetContent(path: string): Promise<string>;
+
+  /**
+   * 指定されたJSファイルを、現在の環境に最適なHTMLスクリプトタグ形式に解決する
+   * @param path - 静的アセットの相対パス
+   * @returns 展開可能なHTMLスクリプトタグ文字列のPromise
+   */
+  resolveScriptTag(path: string): Promise<string>;
+
+  /**
+   * プレゼンター画面を開くための最適な起動URLを解決する
+   * @returns 起動URL文字列のPromise
+   */
+  resolvePresenterUrl(): Promise<string>;
+}

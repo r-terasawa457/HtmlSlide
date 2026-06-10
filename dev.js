@@ -98,63 +98,33 @@ Bun.serve({
       }
     }
 
-    // 💡 開発時における分離型デバッグ運用の肝
-    // 開発サーバーから配信される main.js のみ、「DEV_HTML:」というマーカーと共に、
-    // インライン化を行わない分離参照用のクリーンなHTMLストリームをプレースホルダーへ注入します。
-    // 💡 開発時における分離型デバッグ運用の肝
-    if (pathname === "/dist/main.js") {
-      const file = Bun.file("./dist/main.js");
-      if (await file.exists()) {
-        let jsText = await file.text();
+    // 💡 開発環境用アセットのルーティング
+    if (pathname.startsWith("/themes/")) {
+      const themePath = pathname.slice(8); // "/themes/" を除去
+      let themeFile;
+      if (themePath === "css/bootstrap.min.css") {
+        themeFile = Bun.file("./static/css/bootstrap.min.css");
+      } else if (themePath === "css/vs.css") {
+        themeFile = Bun.file("./src/theme/vs.css");
+      } else if (themePath === "slide-thema-default.css") {
+        themeFile = Bun.file("./src/theme/slide-thema-default.css");
+      }
 
-        const devPresenterHtml = `DEV_HTML:<!DOCTYPE html>
-<html lang="ja">
-<head>
-  <meta charset="UTF-8" />
-  <title>Dynamic Slide System [プレゼンター]</title>
-  <link rel="stylesheet" href="/dist/main.css" />
-</head>
-<body class="present-mode">
-  <div id="present-container">
-    <iframe id="present-iframe" style="width: 100%; height: 100%; border: none; overflow: hidden" scrolling="no"></iframe>
-  </div>
-  <div id="fullscreen-hint">全画面表示 (F11)</div>
-  <script type="module" src="/dist/presenter.js"></script>
-</body>
-</html>`;
-
-        const escapedDevPresenterHtml = devPresenterHtml
-          .replace(/\\/g, "\\\\")
-          .replace(/"/g, '\\"')
-          .replace(/\r?\n/g, "\\n");
-
-        jsText = jsText
-          .split("__PRESENTER_DATA_PLACEHOLDER__")
-          .join(escapedDevPresenterHtml);
-
-        // ビルトインテーマCSSの収集と埋め込み
-        const builtinThemes = {
-          "css/bootstrap.min.css": await Bun.file(
-            "./static/css/bootstrap.min.css",
-          ).text(),
-          "css/vs.css": await Bun.file("./src/theme/vs.css").text(),
-          "slide-thema-default.css": await Bun.file(
-            "./src/theme/slide-thema-default.css",
-          ).text(),
-        };
-
-        const escapedBuiltinThemes = JSON.stringify(builtinThemes)
-          .replace(/\\/g, "\\\\")
-          .replace(/"/g, '\\"');
-
-        jsText = jsText
-          .split("__BUILTIN_THEMES_PLACEHOLDER__")
-          .join(escapedBuiltinThemes);
-
-        return new Response(jsText, {
-          headers: { "Content-Type": "application/javascript" },
+      if (themeFile && (await themeFile.exists())) {
+        return new Response(themeFile, {
+          headers: { "Content-Type": "text/css" },
         });
       }
+    }
+
+    if (pathname === "/presenter.html") {
+      const file = Bun.file("./src/presenter.html");
+      if (await file.exists()) return new Response(file);
+    }
+
+    if (pathname === "/pptx_export.html") {
+      const file = Bun.file("./src/pptx_export.html");
+      if (await file.exists()) return new Response(file);
     }
 
     let file = Bun.file(join(".", pathname));
