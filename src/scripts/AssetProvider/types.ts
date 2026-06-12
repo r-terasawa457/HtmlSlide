@@ -19,7 +19,7 @@ export interface IAssetProvider {
   /**
    * 指定されたテーマCSSの生テキスト内容を解決する
    * @param name - テーマ名、またはテーマファイルのパス
-   * @returns CSS of 生テキスト内容のPromise
+   * @returns CSSの生テキスト内容のPromise
    */
   resolveThemeCss(name: string): Promise<string>;
 
@@ -38,8 +38,9 @@ export interface IAssetProvider {
   resolveScriptTag(path: string): Promise<string>;
 
   /**
-   * プレゼンター画面を開くための最適な起動URLを解決する
-   * @returns 起動URL文字列のPromise
+   * テンプレートHTML内の静的アセット参照（src/href）を現在の環境に合わせて自動解決し、起動URLを返却する
+   * @param templatePath - テンプレートHTMLの相対パス
+   * @returns 結合・解決されたHTMLのBlob URLのPromise
    */
-  resolvePresenterUrl(): Promise<string>;
+  resolveCompositeHtmlUrl(templatePath: string): Promise<string>;
 }

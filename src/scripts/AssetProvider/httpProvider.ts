@@ -1,20 +1,22 @@
 import type { IAssetProvider } from "./types";
 
+const createTextBlobUrl = (content: string, contentType: string): string => {
+  const blob = new Blob([content], { type: contentType });
+  return URL.createObjectURL(blob);
+};
+
 export const httpProvider: IAssetProvider = {
   async resolveAssetUrl(path: string): Promise<string> {
     return `${window.location.origin}/${path}`;
   },
 
   async resolveStyleTag(path: string): Promise<string> {
-    return `<link rel="stylesheet" href="${window.location.origin}/${path}" />`;
+    const url = await this.resolveAssetUrl(path);
+    return `<link rel="stylesheet" href="${url}" />`;
   },
 
   async resolveThemeCss(name: string): Promise<string> {
-    const response = await fetch(`/themes/${name}`);
-    if (!response.ok) {
-      throw new Error(`Failed to fetch theme CSS: ${name}`);
-    }
-    return response.text();
+    return this.resolveAssetContent(`themes/${name}`);
   },
 
   async resolveAssetContent(path: string): Promise<string> {
@@ -26,23 +28,32 @@ export const httpProvider: IAssetProvider = {
   },
 
   async resolveScriptTag(path: string): Promise<string> {
-    return `<script type="module" src="${window.location.origin}/${path}"></script>`;
+    const url = await this.resolveAssetUrl(path);
+    return `<script type="module" src="${url}"></script>`;
   },
 
-  async resolvePresenterUrl(): Promise<string> {
-    const presenterTemplate =
-      await httpProvider.resolveAssetContent("src/presenter.html");
-    const presenterStyle = await httpProvider.resolveStyleTag(
-      "src/css/presenter.css",
-    );
-    const presenterScript =
-      await httpProvider.resolveScriptTag("dist/presenter.js");
+  async resolveCompositeHtmlUrl(templatePath: string): Promise<string> {
+    const htmlText = await this.resolveAssetContent(templatePath);
 
-    const presenterHtml = presenterTemplate
-      .replace("", () => presenterStyle)
-      .replace("", () => presenterScript);
+    const parser = new DOMParser();
+    const doc = parser.parseFromString(htmlText, "text/html");
+    const origin = window.location.origin;
 
-    const blob = new Blob([presenterHtml], { type: "text/html" });
-    return URL.createObjectURL(blob);
+    doc.querySelectorAll("script[src]").forEach((el) => {
+      const src = el.getAttribute("src") || "";
+      if (!src.startsWith("http") && !src.startsWith("/")) {
+        el.setAttribute("src", `${origin}/${src}`);
+      }
+    });
+
+    doc.querySelectorAll("link[rel='stylesheet'][href]").forEach((el) => {
+      const href = el.getAttribute("href") || "";
+      if (!href.startsWith("http") && !href.startsWith("/")) {
+        el.setAttribute("href", `${origin}/${href}`);
+      }
+    });
+
+    const serializedHtml = "<!DOCTYPE html>\n" + doc.documentElement.outerHTML;
+    return createTextBlobUrl(serializedHtml, "text/html");
   },
 };

@@ -7,36 +7,42 @@ const getEmbeddedAsset = (path: string): string => {
   return assets[path] || "";
 };
 
+const createTextBlobUrl = (content: string, contentType: string): string => {
+  const blob = new Blob([content], { type: contentType });
+  return URL.createObjectURL(blob);
+};
+
+const normalizePath = (path: string): string => {
+  return path.replace(/^\.\//, "");
+};
+
 export const portableProvider: IAssetProvider = {
   async resolveAssetUrl(path: string): Promise<string> {
     if (blobUrlCache[path]) {
       return blobUrlCache[path];
     }
-    const content = getEmbeddedAsset(path);
+    const content = await this.resolveAssetContent(path);
     if (!content) {
       throw new Error(`Asset not found in EmbeddedAssets: ${path}`);
     }
+
     let type = "text/plain";
-    if (path.endsWith(".html")) {
-      type = "text/html";
-    } else if (path.endsWith(".css")) {
-      type = "text/css";
-    } else if (path.endsWith(".js")) {
-      type = "application/javascript";
-    }
-    const blob = new Blob([content], { type });
-    const url = URL.createObjectURL(blob);
+    if (path.endsWith(".html")) type = "text/html";
+    else if (path.endsWith(".css")) type = "text/css";
+    else if (path.endsWith(".js")) type = "application/javascript";
+
+    const url = createTextBlobUrl(content, type);
     blobUrlCache[path] = url;
     return url;
   },
 
   async resolveStyleTag(path: string): Promise<string> {
-    const content = getEmbeddedAsset(path);
+    const content = await this.resolveAssetContent(path);
     return `<style>${content}</style>`;
   },
 
   async resolveThemeCss(name: string): Promise<string> {
-    return getEmbeddedAsset(`themes/${name}`);
+    return this.resolveAssetContent(`themes/${name}`);
   },
 
   async resolveAssetContent(path: string): Promise<string> {
@@ -44,20 +50,44 @@ export const portableProvider: IAssetProvider = {
   },
 
   async resolveScriptTag(path: string): Promise<string> {
-    const content = getEmbeddedAsset(path);
+    const content = await this.resolveAssetContent(path);
     return `<script type="module">${content}</script>`;
   },
 
-  async resolvePresenterUrl(): Promise<string> {
-    const presenterTemplate = getEmbeddedAsset("presenter.html");
-    const presenterStyle = `<style>${getEmbeddedAsset("src/css/presenter.css")}</style>`;
-    const presenterScript = `<script type="module">${getEmbeddedAsset("dist/presenter.js")}</script>`;
+  async resolveCompositeHtmlUrl(templatePath: string): Promise<string> {
+    const htmlText = await this.resolveAssetContent(templatePath);
 
-    const presenterHtml = presenterTemplate
-      .replace("<!-- PRESENTER_STYLE_TAG -->", () => presenterStyle)
-      .replace("<!-- PRESENTER_SCRIPT_TAG -->", () => presenterScript);
+    const parser = new DOMParser();
+    const doc = parser.parseFromString(htmlText, "text/html");
 
-    const blob = new Blob([presenterHtml], { type: "text/html" });
-    return URL.createObjectURL(blob);
+    const scripts = doc.querySelectorAll("script[src]");
+    for (const script of Array.from(scripts)) {
+      const src = script.getAttribute("src") || "";
+      if (src.startsWith("http") || src.startsWith("/")) continue;
+
+      const assetContent = await this.resolveAssetContent(normalizePath(src));
+      if (!assetContent) continue;
+
+      const inlineScript = doc.createElement("script");
+      inlineScript.type = "module";
+      inlineScript.textContent = assetContent;
+      script.parentNode?.replaceChild(inlineScript, script);
+    }
+
+    const links = doc.querySelectorAll("link[rel='stylesheet'][href]");
+    for (const link of Array.from(links)) {
+      const href = link.getAttribute("href") || "";
+      if (href.startsWith("http") || href.startsWith("/")) continue;
+
+      const assetContent = await this.resolveAssetContent(normalizePath(href));
+      if (!assetContent) continue;
+
+      const inlineStyle = doc.createElement("style");
+      inlineStyle.textContent = assetContent;
+      link.parentNode?.replaceChild(inlineStyle, link);
+    }
+
+    const serializedHtml = "<!DOCTYPE html>\n" + doc.documentElement.outerHTML;
+    return createTextBlobUrl(serializedHtml, "text/html");
   },
 };

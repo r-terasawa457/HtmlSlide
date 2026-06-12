@@ -323,7 +323,8 @@ export async function setupViewer(slidesHtml: string): Promise<void> {
     const presentBtn = document.getElementById("presentBtn");
     if (presentBtn) {
       presentBtn.onclick = async () => {
-        const presenterUrl = await AssetProvider.resolvePresenterUrl();
+        const presenterUrl =
+          await AssetProvider.resolveCompositeHtmlUrl("src/presenter.html");
 
         presenterWindow = window.open(
           presenterUrl,

@@ -57,7 +57,7 @@ try {
 
   // 6. EmbeddedAssets オブジェクトを構築
   const EmbeddedAssets = {
-    "presenter.html": presenterTemplate,
+    "src/presenter.html": presenterTemplate,
     "pptx_export.html": pptxExportTemplate,
     "dist/presenter.js": compiledPresenterJs,
     "dist/pptxExport.js": compiledPptxExportJs,
