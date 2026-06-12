@@ -1,17 +1,14 @@
+import { AssetProvider } from "./AssetProvider";
+
 const BASE_WIDTH = 1280;
 const BASE_HEIGHT = 720;
 let globalCurrentPage = 1;
 let globalTotalPages = 0;
 
-function createSrcDoc(slidesHtml: string, slidesCss: string): string {
-  const isDev =
-    window.location.hostname === "localhost" ||
-    window.location.hostname === "127.0.0.1" ||
-    window.location.port !== "";
-
-  const cssContent = isDev
-    ? `<link rel="stylesheet" href="/src/css/slide_root.css" />`
-    : `<style>${slidesCss}</style>`;
+async function createSrcDoc(slidesHtml: string): Promise<string> {
+  const cssContent = await AssetProvider.resolveStyleTag(
+    "src/css/slide_root.css",
+  );
 
   return `<!DOCTYPE html>
 <html lang="ja">
@@ -75,12 +72,12 @@ function initPresenter(): void {
   }
 
   // 親からデータ（slidesHtml, slidesCss）を受け取った時にスライドを構築
-  window.addEventListener("message", (e) => {
+  window.addEventListener("message", async (e) => {
     if (!e.data) return;
 
     if (e.data.type === "presenter_init") {
       const { slidesHtml, slidesCss, page } = e.data;
-      iframe.srcdoc = createSrcDoc(slidesHtml, slidesCss);
+      iframe.srcdoc = await createSrcDoc(slidesHtml);
 
       iframe.onload = () => {
         const iframeDoc = iframe.contentDocument;
