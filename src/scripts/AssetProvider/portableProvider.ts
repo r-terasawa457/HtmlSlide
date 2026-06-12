@@ -2,9 +2,12 @@ import type { IAssetProvider } from "./types";
 
 const blobUrlCache: Record<string, string> = {};
 
-const getEmbeddedAsset = (path: string): string => {
+/**
+ * グローバル空間から埋め込みアセットを取得する
+ */
+const getEmbeddedAsset = (path: string): string | undefined => {
   const assets = (globalThis as any).EmbeddedAssets || {};
-  return assets[path] || "";
+  return assets[path];
 };
 
 const createTextBlobUrl = (content: string, contentType: string): string => {
@@ -22,9 +25,6 @@ export const portableProvider: IAssetProvider = {
       return blobUrlCache[path];
     }
     const content = await this.resolveAssetContent(path);
-    if (!content) {
-      throw new Error(`Asset not found in EmbeddedAssets: ${path}`);
-    }
 
     let type = "text/plain";
     if (path.endsWith(".html")) type = "text/html";
@@ -45,8 +45,15 @@ export const portableProvider: IAssetProvider = {
     return this.resolveAssetContent(`themes/${name}`);
   },
 
+  /**
+   * アセットが存在しない場合は明示的に例外をスローし、httpProvider と挙動を合わせる
+   */
   async resolveAssetContent(path: string): Promise<string> {
-    return getEmbeddedAsset(path);
+    const content = getEmbeddedAsset(path);
+    if (content === undefined) {
+      throw new Error(`Asset not found in EmbeddedAssets: ${path}`);
+    }
+    return content;
   },
 
   async resolveScriptTag(path: string): Promise<string> {
@@ -60,32 +67,49 @@ export const portableProvider: IAssetProvider = {
     const parser = new DOMParser();
     const doc = parser.parseFromString(htmlText, "text/html");
 
-    const scripts = doc.querySelectorAll("script[src]");
-    for (const script of Array.from(scripts)) {
-      const src = script.getAttribute("src") || "";
-      if (src.startsWith("http") || src.startsWith("/")) continue;
+    // --- 1. スクリプトのインライン化（Promise.all による並列処理） ---
+    const scripts = Array.from(doc.querySelectorAll("script[src]"));
+    await Promise.all(
+      scripts.map(async (script) => {
+        const src = script.getAttribute("src") || "";
+        if (src.startsWith("http") || src.startsWith("/")) return;
 
-      const assetContent = await this.resolveAssetContent(normalizePath(src));
-      if (!assetContent) continue;
+        try {
+          const assetContent = await this.resolveAssetContent(
+            normalizePath(src),
+          );
+          const inlineScript = doc.createElement("script");
+          inlineScript.type = "module";
+          inlineScript.textContent = assetContent;
+          script.parentNode?.replaceChild(inlineScript, script);
+        } catch (error) {
+          console.error(`Failed to inline script: ${src}`, error);
+          // 必要に応じて、ここで再スローして処理全体を中断させることも可能
+        }
+      }),
+    );
 
-      const inlineScript = doc.createElement("script");
-      inlineScript.type = "module";
-      inlineScript.textContent = assetContent;
-      script.parentNode?.replaceChild(inlineScript, script);
-    }
+    // --- 2. スタイルシートのインライン化（Promise.all による並列処理） ---
+    const links = Array.from(
+      doc.querySelectorAll("link[rel='stylesheet'][href]"),
+    );
+    await Promise.all(
+      links.map(async (link) => {
+        const href = link.getAttribute("href") || "";
+        if (href.startsWith("http") || href.startsWith("/")) return;
 
-    const links = doc.querySelectorAll("link[rel='stylesheet'][href]");
-    for (const link of Array.from(links)) {
-      const href = link.getAttribute("href") || "";
-      if (href.startsWith("http") || href.startsWith("/")) continue;
-
-      const assetContent = await this.resolveAssetContent(normalizePath(href));
-      if (!assetContent) continue;
-
-      const inlineStyle = doc.createElement("style");
-      inlineStyle.textContent = assetContent;
-      link.parentNode?.replaceChild(inlineStyle, link);
-    }
+        try {
+          const assetContent = await this.resolveAssetContent(
+            normalizePath(href),
+          );
+          const inlineStyle = doc.createElement("style");
+          inlineStyle.textContent = assetContent;
+          link.parentNode?.replaceChild(inlineStyle, link);
+        } catch (error) {
+          console.error(`Failed to inline style: ${href}`, error);
+        }
+      }),
+    );
 
     const serializedHtml = "<!DOCTYPE html>\n" + doc.documentElement.outerHTML;
     return createTextBlobUrl(serializedHtml, "text/html");
