@@ -52,11 +52,13 @@ try {
   const compiledPptxExportJs = await Bun.file("./dist/pptxExport.js").text();
   const compiledCss = await Bun.file("./dist/main.css").text();
   const sourceHtml = await Bun.file("./index.html").text();
+  const viewerTemplate = await Bun.file("./src/viewer.html").text();
   const presenterTemplate = await Bun.file("./src/presenter.html").text();
   const pptxExportTemplate = await Bun.file("./src/pptx_export.html").text();
 
   // 6. EmbeddedAssets オブジェクトを構築
   const EmbeddedAssets = {
+    "src/viewer.html": viewerTemplate,
     "src/presenter.html": presenterTemplate,
     "pptx_export.html": pptxExportTemplate,
     "dist/presenter.js": compiledPresenterJs,
