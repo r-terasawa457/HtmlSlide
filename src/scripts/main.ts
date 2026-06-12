@@ -1,6 +1,5 @@
 import "../css/viewer.css";
 
-// import { SlidesEngine } from "./SlidesEngine.ts";
 import { SlidesEngine } from "./SlideEngine2.ts";
 import { setupViewer } from "./viewer.ts";
 import { AssetProvider } from "./AssetProvider";
@@ -92,12 +91,17 @@ function setupDragAndDrop(): void {
 
     if (items && items.length > 0) {
       try {
+        const entries: FileSystemEntry[] = [];
         for (const item of Array.from(items)) {
           const entry = item.webkitGetAsEntry();
           if (entry) {
-            const files = await collectFilesViaEntries(entry);
-            droppedFiles.push(...files);
+            entries.push(entry);
           }
+        }
+
+        for (const entry of entries) {
+          const files = await collectFilesViaEntries(entry);
+          droppedFiles.push(...files);
         }
       } catch (err) {
         isFallbackMode = true;
@@ -119,7 +123,6 @@ function setupDragAndDrop(): void {
       let mdContent = "";
       let mdTitle = "";
 
-      // ドロップされたMarkdownの階層を基準（ベースプレフィックス）として抽出
       let basePrefix = "";
       const mdDropped = droppedFiles.find((d) => d.file.name.endsWith(".md"));
       if (mdDropped) {
@@ -134,12 +137,12 @@ function setupDragAndDrop(): void {
       for (const dropped of droppedFiles) {
         const { relativePath, file } = dropped;
 
-        // Markdownからの相対パスに統一するためベースプレフィックスを除去
         let key = relativePath.toLowerCase();
         if (basePrefix && key.startsWith(basePrefix)) {
           key = key.substring(basePrefix.length);
         }
         key = key.replace(/^\.\//, "");
+        key = encodeURI(key).toLowerCase();
 
         if (file.name.endsWith(".md")) {
           if (mdContent) {
