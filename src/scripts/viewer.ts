@@ -1,3 +1,5 @@
+import { AssetProvider } from "./AssetProvider";
+
 const BASE_WIDTH = 1280;
 const BASE_HEIGHT = 720;
 
@@ -5,22 +7,13 @@ let globalCurrentPage = 1;
 let globalTotalPages = 0;
 let presenterWindow: Window | null = null;
 
-const slidesCss = "__SLIDES_CSS_PLACEHOLDER__";
-const builtinThemesStr = "__BUILTIN_THEMES_PLACEHOLDER__";
-const pptxExportData = "__PPTX_EXPORT_DATA_PLACEHOLDER__";
-
 /**
  * ビューアーおよびプレゼンターの内部 iframe 用 srcdoc 生成関数
  */
-function createSrcDoc(slidesHtml: string): string {
-  const isDev =
-    window.location.hostname === "localhost" ||
-    window.location.hostname === "127.0.0.1" ||
-    window.location.port !== "";
-
-  const cssContent = isDev
-    ? `<link rel="stylesheet" href="/src/css/slide_root.css" />`
-    : `<style>${slidesCss}</style>`;
+async function createSrcDoc(slidesHtml: string): Promise<string> {
+  const cssContent = await AssetProvider.resolveStyleTag(
+    "src/css/slide_root.css",
+  );
 
   return `<!DOCTYPE html>
 <html lang="ja">
@@ -37,7 +30,7 @@ function createSrcDoc(slidesHtml: string): string {
 </html>`;
 }
 
-export function setupViewer(slidesHtml: string): void {
+export async function setupViewer(slidesHtml: string): Promise<void> {
   const viewerUi = document.getElementById("viewer-ui");
   if (viewerUi) viewerUi.style.display = "block";
 
@@ -64,7 +57,7 @@ export function setupViewer(slidesHtml: string): void {
   )
     return;
 
-  iframe.srcdoc = createSrcDoc(slidesHtml);
+  iframe.srcdoc = await createSrcDoc(slidesHtml);
 
   iframe.onload = () => {
     const iframeDoc = iframe.contentDocument;
@@ -130,10 +123,13 @@ export function setupViewer(slidesHtml: string): void {
     }
 
     // メッセージ通信によるプレゼンターとの同期処理
-    window.addEventListener("message", (e) => {
+    window.addEventListener("message", async (e) => {
       if (!e.data) return;
       if (e.data.type === "presenter_ready") {
         if (presenterWindow) {
+          const slidesCss = await AssetProvider.resolveAssetContent(
+            "src/css/slide_root.css",
+          );
           presenterWindow.postMessage(
             {
               type: "presenter_init",
@@ -256,7 +252,7 @@ export function setupViewer(slidesHtml: string): void {
       "pptxBtn",
     ) as HTMLButtonElement | null;
     if (pptxBtn) {
-      pptxBtn.onclick = () => {
+      pptxBtn.onclick = async () => {
         const title = document.title || "presentation";
         const fileName = `${title}.pptx`;
 
@@ -292,30 +288,22 @@ export function setupViewer(slidesHtml: string): void {
           alert(`PPTXのエクスポートに失敗しました:\n${msg}`);
         };
 
-        // Base64からpptx_export.htmlのコンテンツを復元
-        let pptxExportHtmlContent = "";
-        if (pptxExportData.startsWith("DEV_HTML:")) {
-          pptxExportHtmlContent = pptxExportData.slice(9);
-        } else {
-          try {
-            const binaryString = atob(pptxExportData);
-            const len = binaryString.length;
-            const bytes = new Uint8Array(len);
-            for (let i = 0; i < len; i++) {
-              bytes[i] = binaryString.charCodeAt(i);
-            }
-            pptxExportHtmlContent = new TextDecoder("utf-8").decode(bytes);
-          } catch (e: any) {
-            (window as any).onPptxExportError(`デコードエラー: ${e.message}`);
-            return;
-          }
-        }
+        const pptxExportTemplate =
+          await AssetProvider.resolveAssetContent("pptx_export.html");
+        const pptxExportScript =
+          await AssetProvider.resolveScriptTag("dist/pptxExport.js");
+        const pptxExportHtml = pptxExportTemplate.replace(
+          "<!-- EXPORT_SCRIPT_TAG -->",
+          () => pptxExportScript,
+        );
+        exportIframe.srcdoc = pptxExportHtml;
 
-        exportIframe.srcdoc = pptxExportHtmlContent;
-
-        exportIframe.onload = () => {
+        exportIframe.onload = async () => {
           const exportWin = exportIframe.contentWindow as any;
           if (exportWin && exportWin.startExport) {
+            const slidesCss = await AssetProvider.resolveAssetContent(
+              "src/css/slide_root.css",
+            );
             exportWin.startExport({
               slidesHtml,
               slidesCss,
@@ -334,34 +322,12 @@ export function setupViewer(slidesHtml: string): void {
 
     const presentBtn = document.getElementById("presentBtn");
     if (presentBtn) {
-      presentBtn.onclick = () => {
-        const embeddedData = "__PRESENTER_DATA_PLACEHOLDER__";
-        let presenterHtmlContent = "";
-
-        if (embeddedData.startsWith("DEV_HTML:")) {
-          presenterHtmlContent = embeddedData.slice(9);
-        } else {
-          try {
-            const binaryString = atob(embeddedData);
-            const len = binaryString.length;
-            const bytes = new Uint8Array(len);
-            for (let i = 0; i < len; i++) {
-              bytes[i] = binaryString.charCodeAt(i);
-            }
-            presenterHtmlContent = new TextDecoder("utf-8").decode(bytes);
-          } catch (e: any) {
-            alert(`プレゼンターの展開エラー: ${e.message}`);
-            return;
-          }
-        }
-
-        // 親から document.write すると file:// 環境で SecurityError になるため、
-        // Blob URL を生成して window.open に直接指定します
-        const blob = new Blob([presenterHtmlContent], { type: "text/html" });
-        const url = URL.createObjectURL(blob);
+      presentBtn.onclick = async () => {
+        const presenterUrl =
+          await AssetProvider.resolveCompositeHtmlUrl("src/presenter.html");
 
         presenterWindow = window.open(
-          url,
+          presenterUrl,
           "presWin",
           `width=${BASE_WIDTH},height=${BASE_HEIGHT},menubar=no,toolbar=no,location=no,status=no`,
         );

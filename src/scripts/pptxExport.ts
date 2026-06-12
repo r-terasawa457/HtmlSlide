@@ -69,10 +69,10 @@ function preprocessMathJax(container: HTMLElement): void {
   }
   // 1.5. スライド内部にインラインで挿入されている style タグをすべて head へ移動（退避）させる
   // これにより、スタイルは有効なまま、dom-to-pptx が内部のCSSをテキストノードとしてPPTXに書き出すのを防ぎます。
-  const internalStyles = container.querySelectorAll("style");
-  internalStyles.forEach((style, index) => {
-    document.head.appendChild(style);
-  });
+  // const internalStyles = container.querySelectorAll("style");
+  // internalStyles.forEach((style, index) => {
+  //   document.head.appendChild(style);
+  // });
 
   // 2. SVGコンテナ要素のサイズを明示的にpx単位に置換
   const mjxContainers = container.querySelectorAll("mjx-container[jax='SVG']");

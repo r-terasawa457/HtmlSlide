@@ -1,8 +1,12 @@
-import { describe, test, expect, beforeEach, mock } from "bun:test";
+import { describe, test, expect, beforeEach } from "bun:test";
 import MarkdownIt from "markdown-it";
 import { slideEnginePlugin } from "../index";
+import { imageAssetPlugin } from "../ImageAssetPlugin";
 import { type SlideEnv } from "../MetaParser";
 
+/**
+ * slideEnginePlugin および集約される各内部プラグインの統合動作を検証するテストスイート。
+ */
 describe("slideEnginePlugin", () => {
   let md: MarkdownIt;
   let env: SlideEnv;
@@ -14,6 +18,7 @@ describe("slideEnginePlugin", () => {
       themeStyles: [],
       variables: {},
       slideCount: 0,
+      assets: {},
     };
   });
 
@@ -32,7 +37,7 @@ describe("slideEnginePlugin", () => {
       "",
       "<header>共通ヘッダー内容</header>",
       "",
-      "---", // 前後に明確な空行を置くことで、純粋な hr としてパースさせる
+      "---",
       "",
       "## ページ1の本文",
     ].join("\n");
@@ -64,7 +69,7 @@ describe("slideEnginePlugin", () => {
       "## トピック: {% meta.info.topic %}",
       "",
       "スライド番号: {% page-number %} / {% page-total %}",
-      "", // ★ここに空行を入れることで、次の「---」がSetext下線化するのを防ぐ
+      "",
       "---",
       "",
       "## ページ2",
@@ -113,7 +118,6 @@ describe("slideEnginePlugin", () => {
 
     const html = md.render(src, env);
 
-    // markdown-it が生成する仕様通りの改行コード（\n）を期待値に反映
     expect(html).toContain(
       '<section class="page" id="slide-1" data-page="1">\n<header>グローバル共通</header>\n<div class="content">',
     );
@@ -152,5 +156,59 @@ describe("slideEnginePlugin", () => {
 
     expect(env.variables).toEqual({});
     expect(html).toContain("<h2>構文エラーのテスト</h2>");
+  });
+});
+
+/**
+ * imageAssetPlugin 単体における画像パスの置換、属性解析、およびフォールバックの挙動を検証するテストスイート。
+ */
+describe("imageAssetPlugin", () => {
+  let md: MarkdownIt;
+  let env: SlideEnv;
+
+  beforeEach(() => {
+    md = new MarkdownIt({ html: true });
+    md.use(imageAssetPlugin);
+    env = {
+      themeStyles: [],
+      variables: {},
+      slideCount: 0,
+      assets: {
+        "assets/images/logo.png": "data:image/png;base64,LOGO_DATA",
+        "diagram.svg": "data:image/svg+xml;base64,DIAGRAM_DATA",
+      },
+    };
+  });
+
+  test("定義されたアセットのパスと完全一致する場合に Base64 データURL へ置換されること", () => {
+    const src = '![m-4]("assets/images/logo.png" "システムロゴ")';
+    const html = md.render(src, env);
+
+    expect(html).toContain('src="data:image/png;base64,LOGO_DATA"');
+    expect(html).toContain('class="m-4 img-fluid"');
+    expect(html).toContain('alt="システムロゴの画像"');
+  });
+
+  test("相対パスのプレフィックスが存在する場合でも後方一致でアセットが解決されること", () => {
+    const src = "![m-4](../diagram.svg)";
+    const html = md.render(src, env);
+
+    expect(html).toContain('src="data:image/svg+xml;base64,DIAGRAM_DATA"');
+  });
+
+  test("title 属性が指定されている場合に alt 属性および title 属性の文字列が正しく構成されること", () => {
+    const src = '![m-4](assets/images/logo.png "システムロゴ")';
+    const html = md.render(src, env);
+
+    expect(html).toContain('alt="システムロゴの画像"');
+    expect(html).toContain('title="システムロゴ"');
+  });
+
+  test("alt テキスト内にインラインの属性定義(class, style)が含まれる場合に正しくパースされHTML属性へ展開されること", () => {
+    const src = '![custom-class style="margin: 10px;"](assets/images/logo.png)';
+    const html = md.render(src, env);
+
+    expect(html).toContain('class="custom-class img-fluid"');
+    expect(html).toContain('style="margin: 10px;"');
   });
 });

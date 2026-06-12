@@ -17,12 +17,12 @@
     display: flex;
     flex-direction: column;
     align-items: center;
-    gap: 10pt;
+    gap: 10px;
     padding: 0;
   }
 
   .page {
-    box-shadow: 0 0 10pt rgba(0, 0, 0, 0.3);
+    box-shadow: 0 0 10px rgba(0, 0, 0, 0.3);
   }
 
   body.present-mode .slides {
@@ -79,7 +79,7 @@
 
   /* 4. PowerPoint標準サイズ（16:9）で出力用紙を定義 */
   @page {
-    size: 338.67mm 190.5mm;
+    size: 960pt 540pt;
     margin: 0;
   }
 

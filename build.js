@@ -55,67 +55,29 @@ try {
   const presenterTemplate = await Bun.file("./src/presenter.html").text();
   const pptxExportTemplate = await Bun.file("./src/pptx_export.html").text();
 
-  // 2.5. slide_root.cssの埋め込み
-  const slideRootCss = await Bun.file("./src/css/slide_root.css").text();
-  const escapedSlideRootCss = slideRootCss
-    .replace(/\\/g, "\\\\")
-    .replace(/"/g, '\\"')
-    .replace(/\r?\n/g, "\\n");
-
-  compiledMainJs = compiledMainJs
-    .split("__SLIDES_CSS_PLACEHOLDER__")
-    .join(escapedSlideRootCss);
-
-  // 2.6. ビルトインテーマCSSの収集と埋め込み
-  const builtinThemes = {
-    "css/bootstrap.min.css": await Bun.file(
+  // 6. EmbeddedAssets オブジェクトを構築
+  const EmbeddedAssets = {
+    "src/presenter.html": presenterTemplate,
+    "pptx_export.html": pptxExportTemplate,
+    "dist/presenter.js": compiledPresenterJs,
+    "dist/pptxExport.js": compiledPptxExportJs,
+    "src/css/presenter.css": await Bun.file("./src/css/presenter.css").text(),
+    "src/css/slide_root.css": await Bun.file("./src/css/slide_root.css").text(),
+    "themes/css/bootstrap.min.css": await Bun.file(
       "./static/css/bootstrap.min.css",
     ).text(),
-    "css/vs.css": await Bun.file("./src/theme/vs.css").text(),
-    "slide-thema-default.css": await Bun.file(
+    "themes/css/vs.css": await Bun.file("./src/theme/vs.css").text(),
+    "themes/slide-thema-default.css": await Bun.file(
       "./src/theme/slide-thema-default.css",
     ).text(),
   };
 
-  const escapedBuiltinThemes = JSON.stringify(builtinThemes)
-    .replace(/\\/g, "\\\\")
-    .replace(/"/g, '\\"');
+  const jsonStr = JSON.stringify(EmbeddedAssets);
 
-  compiledMainJs = compiledMainJs
-    .split("__BUILTIN_THEMES_PLACEHOLDER__")
-    .join(escapedBuiltinThemes);
-
-  // 3. presenter.html の組み立て（CSSとJSの完全内包化）
-  const bundledPresenterHtml = presenterTemplate
-    .replace("/* BUILD_INJECT_STYLES */", () => compiledCss)
-    .replace("/* BUILD_INJECT_SCRIPT */", () => compiledPresenterJs);
-
-  // 4. 💡 組み立てたHTMLドキュメント全体を安全なBase64文字列に変換
-  const base64PresenterHtml = Buffer.from(
-    bundledPresenterHtml,
-    "utf-8",
-  ).toString("base64");
-
-  // 5. main.js の内部にあるプレースホルダーをBase64文字列で置換
-  // Base64文字セットは [A-Za-z0-9+/=] のみのため、置換用マクロ文字（$など）の誤評価リスクが完全にゼロになります。
-  compiledMainJs = compiledMainJs
-    .split("__PRESENTER_DATA_PLACEHOLDER__")
-    .join(base64PresenterHtml);
-
-  // 5.5. pptx_export.html の組み立てとBase64埋め込み
-  const bundledPptxExportHtml = pptxExportTemplate.replace(
-    "/* BUILD_INJECT_SCRIPT */",
-    () => compiledPptxExportJs,
-  );
-
-  const base64PptxExportHtml = Buffer.from(
-    bundledPptxExportHtml,
-    "utf-8",
-  ).toString("base64");
-
-  compiledMainJs = compiledMainJs
-    .split("__PPTX_EXPORT_DATA_PLACEHOLDER__")
-    .join(base64PptxExportHtml);
+  // compiledMainJs の先頭に EmbeddedAssets を定義して流し込む
+  compiledMainJs = `globalThis.EmbeddedAssets = ${jsonStr};\n` + compiledMainJs;
+  // HTMLパースを崩壊させないよう、すべてのHTML閉じタグを安全にエスケープして埋め込む
+  compiledMainJs = compiledMainJs.replace(/<\/([a-zA-Z]+)>/gi, "<\\/$1>");
 
   // 6. index.html へのメインアセットのインライン結合
   function inlineAssets(htmlTemplate, cssContent, jsContent) {
@@ -124,8 +86,11 @@ try {
       /<script[^>]*src=["']\/dist\/main\.js["'][^>]*>([\s\S]*?<\/script>)?/i;
 
     return htmlTemplate
-      .replace(cssPattern, () => `<style>${cssContent}</style>`)
-      .replace(jsPattern, () => `<script type="module">${jsContent}</script>`);
+      .replace(cssPattern, () => "<style>" + cssContent + "</style>")
+      .replace(
+        jsPattern,
+        () => '<script type="module">' + jsContent + "</script>",
+      );
   }
 
   const bundleHtml = inlineAssets(sourceHtml, compiledCss, compiledMainJs);

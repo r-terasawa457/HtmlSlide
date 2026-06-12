@@ -1,9 +1,9 @@
 import "../css/viewer.css";
-import "../css/present.css";
 
 // import { SlidesEngine } from "./SlidesEngine.ts";
 import { SlidesEngine } from "./SlideEngine2.ts";
 import { setupViewer } from "./viewer.ts";
+import { AssetProvider } from "./AssetProvider";
 
 interface SlidesResult {
   title?: string;
@@ -119,9 +119,27 @@ function setupDragAndDrop(): void {
       let mdContent = "";
       let mdTitle = "";
 
+      // ドロップされたMarkdownの階層を基準（ベースプレフィックス）として抽出
+      let basePrefix = "";
+      const mdDropped = droppedFiles.find((d) => d.file.name.endsWith(".md"));
+      if (mdDropped) {
+        const lastSlash = mdDropped.relativePath.lastIndexOf("/");
+        if (lastSlash >= 0) {
+          basePrefix = mdDropped.relativePath
+            .substring(0, lastSlash + 1)
+            .toLowerCase();
+        }
+      }
+
       for (const dropped of droppedFiles) {
         const { relativePath, file } = dropped;
-        const key = relativePath.toLowerCase();
+
+        // Markdownからの相対パスに統一するためベースプレフィックスを除去
+        let key = relativePath.toLowerCase();
+        if (basePrefix && key.startsWith(basePrefix)) {
+          key = key.substring(basePrefix.length);
+        }
+        key = key.replace(/^\.\//, "");
 
         if (file.name.endsWith(".md")) {
           if (mdContent) {
@@ -168,7 +186,7 @@ function setupDragAndDrop(): void {
       }
 
       if (!mdContent) {
-        const filesArr = Array.from(rawFiles!);
+        const filesArr = Array.from(rawFiles as FileList);
         if (isFallbackMode && filesArr.length === 1 && filesArr[0].size === 0) {
           alert(
             "【ブラウザの制限による通知】\nお使いのブラウザのセキュリティ制限（file://プロトコルにおける日本語パス制限）により、フォルダ構造の直接解析に失敗しました。\n\nお手数ですが、フォルダを開いて中身のファイル群をすべて選択（Ctrl + A）し、それらをまとめてドロップしてください。",
@@ -184,9 +202,20 @@ function setupDragAndDrop(): void {
       currentMarkdownText = mdContent;
       dropZone.style.display = "none";
 
+      const builtinThemes = {
+        "css/bootstrap.min.css": await AssetProvider.resolveThemeCss(
+          "css/bootstrap.min.css",
+        ),
+        "css/vs.css": await AssetProvider.resolveThemeCss("css/vs.css"),
+        "slide-thema-default.css": await AssetProvider.resolveThemeCss(
+          "slide-thema-default.css",
+        ),
+      };
+
       const result = SlidesEngine.run(
         currentMarkdownText,
         assetsMap,
+        builtinThemes,
       ) as SlidesResult;
       if (result.title) {
         document.title = result.title;
@@ -194,7 +223,7 @@ function setupDragAndDrop(): void {
         document.title = mdTitle;
       }
 
-      setupViewer(result.html);
+      await setupViewer(result.html);
     } catch (err) {
       console.error("ファイルのパースに失敗しました:", err);
       alert("ファイルの解析に失敗しました。");
