@@ -19,6 +19,26 @@ export const httpProvider: IAssetProvider = {
     return this.resolveAssetContent(`themes/${name}`);
   },
 
+  /**
+   * 💡 組み込みテーマを並列非同期で一括フェッチし、マップとして返却
+   */
+  async resolveAllBuiltinThemes(): Promise<Record<string, string>> {
+    const builtinThemes: Record<string, string> = {};
+    const themeList = (globalThis as any).BuiltinThemesList || [];
+
+    await Promise.all(
+      themeList.map(async (themePath: string) => {
+        try {
+          builtinThemes[themePath] = await this.resolveThemeCss(themePath);
+        } catch (error) {
+          console.error(`Failed to resolve builtin theme: ${themePath}`, error);
+        }
+      }),
+    );
+
+    return builtinThemes;
+  },
+
   async resolveAssetContent(path: string): Promise<string> {
     const response = await fetch("/" + path);
     if (!response.ok) {

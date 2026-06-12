@@ -1,12 +1,13 @@
 import { join } from "path";
 import { watch } from "fs";
+import { Glob } from "bun";
 
 const PORT = 3000;
 const connectedSockets = new Set();
 
-console.log(
-  "\x1b[36m[Bun Server]\x1b[0m Running in professional dev server mode...",
-);
+const glob = new Glob("**/*.css");
+const themeFiles = Array.from(glob.scanSync({ cwd: "./src/theme" }));
+const themeListStr = JSON.stringify(themeFiles);
 
 // 1. main.ts と presenter.ts の双方を並行してwatch監視コンパイル起動
 Bun.spawn(
@@ -63,7 +64,7 @@ Bun.serve({
     let pathname = url.pathname;
 
     if (pathname === "/_live_reload") {
-      if (server.upgrade(req)) return;
+      if (server.upgrade(req, { data: {} })) return;
       return new Response("Upgrade failed", { status: 400 });
     }
 
@@ -74,9 +75,11 @@ Bun.serve({
       if (await file.exists()) {
         let htmlText = await file.text();
 
+        // 💡 開発環境用ブラウザにも BuiltinThemesList を注入
         const clientScript = `
           <script>
             (function() {
+              globalThis.BuiltinThemesList = ${themeListStr};
               const ws = new WebSocket('ws://' + window.location.host + '/_live_reload');
               ws.onmessage = (e) => {
                 try {
@@ -98,19 +101,12 @@ Bun.serve({
       }
     }
 
-    // 💡 開発環境用アセットのルーティング
+    // 💡 開発環境用アセットのルーティングを完全に自動化 (ハードコードの削除)
     if (pathname.startsWith("/themes/")) {
       const themePath = pathname.slice(8); // "/themes/" を除去
-      let themeFile;
-      if (themePath === "css/bootstrap.min.css") {
-        themeFile = Bun.file("./static/css/bootstrap.min.css");
-      } else if (themePath === "css/vs.css") {
-        themeFile = Bun.file("./src/theme/vs.css");
-      } else if (themePath === "slide-thema-default.css") {
-        themeFile = Bun.file("./src/theme/slide-thema-default.css");
-      }
+      const themeFile = Bun.file(join("./src/theme", themePath));
 
-      if (themeFile && (await themeFile.exists())) {
+      if (await themeFile.exists()) {
         return new Response(themeFile, {
           headers: { "Content-Type": "text/css" },
         });

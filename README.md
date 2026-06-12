@@ -61,7 +61,8 @@ htmlslide/
 │   │   │       └── slideEnginePlugin/ # スライド構造化・変数置換コアプラグイン
 │   │   │           └── test/
 │   │   ├── test/                # スクリプト単体テスト等
-│   │   ├── main.ts              # アプリケーションのメインエントリー。D&Dおよびファイル走査制御
+│   │   ├── main.ts              # アプリケーションのメインエントリー。
+│   │   ├── FileDropScanner.ts   # D&Dおよびファイル走査制御
 │   │   ├── SlideEngine2.ts      # markdown-itの初期化・ルール定義・レンダリング集約
 │   │   ├── viewer.ts            # メインビューアーUI、ズーム・スクロール、PPTXエクスポート仲介
 │   │   └── presenter.ts         # プレゼンターウィンドウ制御、キーイベント・同期通信処理
@@ -69,10 +70,9 @@ htmlslide/
 │   │   ├── vs.css               # コードハイライト用テーマ
 │   │   └── slide-thema-default.css # スライド標準テーマ
 │   ├── presenter.html           # プレゼンター表示用のHTMLテンプレート
-│   └── pptx_export.html         # PPTXエクスポート作業領域用のHTMLテンプレート
+│   └── viewer.html              # ビュアー表示用ののHTMLテンプレート
+│   ├── presenter.html           # プレゼンター表示用のHTMLテンプレート
 ├── static/
-│   └── css/
-│       └── bootstrap.min.css    # 共通UIフレームワークスタイル
 ├── index.html                   # メインアプリケーションのベースHTML
 ├── dev.js                       # 開発用ローカルサーバー（Live Reload対応）
 └── build.js                     # 成果物（単一HTML）生成用ビルドスクリプト

@@ -46,6 +46,26 @@ export const portableProvider: IAssetProvider = {
   },
 
   /**
+   * 💡 埋め込まれたテーマを並列で一括解決し、マップとして返却
+   */
+  async resolveAllBuiltinThemes(): Promise<Record<string, string>> {
+    const builtinThemes: Record<string, string> = {};
+    const themeList = (globalThis as any).BuiltinThemesList || [];
+
+    await Promise.all(
+      themeList.map(async (themePath: string) => {
+        try {
+          builtinThemes[themePath] = await this.resolveThemeCss(themePath);
+        } catch (error) {
+          console.error(`Failed to resolve builtin theme: ${themePath}`, error);
+        }
+      }),
+    );
+
+    return builtinThemes;
+  },
+
+  /**
    * アセットが存在しない場合は明示的に例外をスローし、httpProvider と挙動を合わせる
    */
   async resolveAssetContent(path: string): Promise<string> {
@@ -57,7 +77,10 @@ export const portableProvider: IAssetProvider = {
   },
 
   async resolveScriptTag(path: string): Promise<string> {
-    const content = await this.resolveAssetContent(path);
+    const content = (await this.resolveAssetContent(path)).replace(
+      /<\/script/gi,
+      "<\\/script",
+    );
     return `<script type="module">${content}</script>`;
   },
 
@@ -67,7 +90,6 @@ export const portableProvider: IAssetProvider = {
     const parser = new DOMParser();
     const doc = parser.parseFromString(htmlText, "text/html");
 
-    // --- 1. スクリプトのインライン化（Promise.all による並列処理） ---
     const scripts = Array.from(doc.querySelectorAll("script[src]"));
     await Promise.all(
       scripts.map(async (script) => {
@@ -75,21 +97,20 @@ export const portableProvider: IAssetProvider = {
         if (src.startsWith("http") || src.startsWith("/")) return;
 
         try {
-          const assetContent = await this.resolveAssetContent(
-            normalizePath(src),
-          );
-          const inlineScript = doc.createElement("script");
-          inlineScript.type = "module";
-          inlineScript.textContent = assetContent;
-          script.parentNode?.replaceChild(inlineScript, script);
+          const tagHtml = await this.resolveScriptTag(normalizePath(src));
+          const template = doc.createElement("template");
+          template.innerHTML = tagHtml;
+          const inlineScript = template.content.querySelector("script");
+
+          if (inlineScript) {
+            script.parentNode?.replaceChild(inlineScript, script);
+          }
         } catch (error) {
           console.error(`Failed to inline script: ${src}`, error);
-          // 必要に応じて、ここで再スローして処理全体を中断させることも可能
         }
       }),
     );
 
-    // --- 2. スタイルシートのインライン化（Promise.all による並列処理） ---
     const links = Array.from(
       doc.querySelectorAll("link[rel='stylesheet'][href]"),
     );
@@ -99,12 +120,14 @@ export const portableProvider: IAssetProvider = {
         if (href.startsWith("http") || href.startsWith("/")) return;
 
         try {
-          const assetContent = await this.resolveAssetContent(
-            normalizePath(href),
-          );
-          const inlineStyle = doc.createElement("style");
-          inlineStyle.textContent = assetContent;
-          link.parentNode?.replaceChild(inlineStyle, link);
+          const tagHtml = await this.resolveStyleTag(normalizePath(href));
+          const template = doc.createElement("template");
+          template.innerHTML = tagHtml;
+          const inlineStyle = template.content.querySelector("style");
+
+          if (inlineStyle) {
+            link.parentNode?.replaceChild(inlineStyle, link);
+          }
         } catch (error) {
           console.error(`Failed to inline style: ${href}`, error);
         }
