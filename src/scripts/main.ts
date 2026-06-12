@@ -192,7 +192,9 @@ function setupDragAndDrop(): void {
         const filesArr = Array.from(rawFiles as FileList);
         if (isFallbackMode && filesArr.length === 1 && filesArr[0].size === 0) {
           alert(
-            "【ブラウザの制限による通知】\nお使いのブラウザのセキュリティ制限（file://プロトコルにおける日本語パス制限）により、フォルダ構造の直接解析に失敗しました。\n\nお手数ですが、フォルダを開いて中身のファイル群をすべて選択（Ctrl + A）し、それらをまとめてドロップしてください。",
+            "【ブラウザの制限による通知】\n" +
+              "ローカルファイル（file://）環境で実行されているため、ブラウザのセキュリティ制限によりフォルダ構造の直接解析に失敗しました。\n\n" +
+              "お手数ですが、フォルダを開いて中身のファイル群をすべて選択（Ctrl + A）し、それらをまとめてドロップしてください。",
           );
         } else {
           alert(
