@@ -1,4 +1,5 @@
 import { join } from "path";
+import { Glob } from "bun";
 
 console.log(
   "\x1b[36m[Bun Build]\x1b[0m Starting compilation & Base64 encapsulated bundling...",
@@ -47,41 +48,58 @@ if (!pptxExportBuildResult.success) {
 }
 
 try {
-  let compiledMainJs = await Bun.file("./dist/main.js").text();
-  const compiledPresenterJs = await Bun.file("./dist/presenter.js").text();
-  const compiledPptxExportJs = await Bun.file("./dist/pptxExport.js").text();
-  const compiledCss = await Bun.file("./dist/main.css").text();
-  const sourceHtml = await Bun.file("./index.html").text();
-  const viewerTemplate = await Bun.file("./src/viewer.html").text();
-  const presenterTemplate = await Bun.file("./src/presenter.html").text();
-  const pptxExportTemplate = await Bun.file("./src/pptx_export.html").text();
-
-  // 6. EmbeddedAssets オブジェクトを構築
-  const EmbeddedAssets = {
-    "src/viewer.html": viewerTemplate,
-    "src/presenter.html": presenterTemplate,
-    "src/pptx_export.html": pptxExportTemplate,
-    "dist/presenter.js": compiledPresenterJs,
-    "dist/pptxExport.js": compiledPptxExportJs,
-    "src/css/presenter.css": await Bun.file("./src/css/presenter.css").text(),
-    "src/css/slide_root.css": await Bun.file("./src/css/slide_root.css").text(),
-    "themes/css/bootstrap.min.css": await Bun.file(
-      "./static/css/bootstrap.min.css",
-    ).text(),
-    "themes/css/vs.css": await Bun.file("./src/theme/vs.css").text(),
-    "themes/slide-thema-default.css": await Bun.file(
-      "./src/theme/slide-thema-default.css",
-    ).text(),
+  /** @type {Record<string, string>} 埋め込みアセットのキーとローカルパスのマッピング定義 */
+  const assetMapping = {
+    "src/viewer.html": "./src/viewer.html",
+    "src/presenter.html": "./src/presenter.html",
+    "src/pptx_export.html": "./src/pptx_export.html",
+    "dist/presenter.js": "./dist/presenter.js",
+    "dist/pptxExport.js": "./dist/pptxExport.js",
+    "src/css/presenter.css": "./src/css/presenter.css",
+    "src/css/slide_root.css": "./src/css/slide_root.css",
   };
 
-  const jsonStr = JSON.stringify(EmbeddedAssets);
+  // テーマディレクトリ内の全CSSファイルを自動検知してマッピングに追加
+  const glob = new Glob("**/*.css");
+  const themeFiles = Array.from(glob.scanSync({ cwd: "./src/theme" }));
+  const themeListStr = JSON.stringify(themeFiles);
 
-  // compiledMainJs の先頭に EmbeddedAssets を定義して流し込む
-  compiledMainJs = `globalThis.EmbeddedAssets = ${jsonStr};\n` + compiledMainJs;
-  // HTMLパースを崩壊させないよう、すべてのHTML閉じタグを安全にエスケープして埋め込む
+  for (const file of themeFiles) {
+    assetMapping[`themes/${file}`] = `./src/theme/${file}`;
+  }
+
+  // 定義したマッピングとインライン用コアファイルを並列に一括読み込み
+  const assetKeys = Object.keys(assetMapping);
+  const assetPromises = assetKeys.map((key) =>
+    Bun.file(assetMapping[key]).text(),
+  );
+  const coreFilesPromises = [
+    Bun.file("./dist/main.js").text(),
+    Bun.file("./dist/main.css").text(),
+    Bun.file("./index.html").text(),
+  ];
+
+  const [assetContents, [compiledMainJsSrc, compiledCss, sourceHtml]] =
+    await Promise.all([
+      Promise.all(assetPromises),
+      Promise.all(coreFilesPromises),
+    ]);
+
+  // 読み込んだリソースから EmbeddedAssets オブジェクトを動的に生成
+  const EmbeddedAssets = {};
+  assetKeys.forEach((key, index) => {
+    EmbeddedAssets[key] = assetContents[index];
+  });
+
+  const jsonStr = JSON.stringify(EmbeddedAssets);
+  let compiledMainJs =
+    `globalThis.BuiltinThemesList = ${themeListStr};\nglobalThis.EmbeddedAssets = ${jsonStr};\n` +
+    compiledMainJsSrc;
   compiledMainJs = compiledMainJs.replace(/<\/([a-zA-Z]+)>/gi, "<\\/$1>");
 
-  // 6. index.html へのメインアセットのインライン結合
+  /**
+   * HTML テンプレートに CSS と JavaScript をインライン展開する
+   */
   function inlineAssets(htmlTemplate, cssContent, jsContent) {
     const cssPattern = /<link[^>]*href=["']\/dist\/main\.css["'][^>]*\/?>/i;
     const jsPattern =
@@ -97,7 +115,6 @@ try {
 
   const bundleHtml = inlineAssets(sourceHtml, compiledCss, compiledMainJs);
 
-  // 最終成果物をスタンドアロン出力
   await Bun.write("./dist/index.html", bundleHtml);
 
   console.log(

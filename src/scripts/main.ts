@@ -133,15 +133,7 @@ async function processDroppedFiles(
   dropZone.style.display = "none";
   document.body.insertAdjacentHTML("beforeend", viewerUiTemplate);
 
-  const builtinThemes = {
-    "css/bootstrap.min.css": await AssetProvider.resolveThemeCss(
-      "css/bootstrap.min.css",
-    ),
-    "css/vs.css": await AssetProvider.resolveThemeCss("css/vs.css"),
-    "slide-thema-default.css": await AssetProvider.resolveThemeCss(
-      "slide-thema-default.css",
-    ),
-  };
+  const builtinThemes = await AssetProvider.resolveAllBuiltinThemes();
 
   const result = SlidesEngine.run(
     currentMarkdownText,

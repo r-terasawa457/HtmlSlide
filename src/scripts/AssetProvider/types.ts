@@ -24,6 +24,12 @@ export interface IAssetProvider {
   resolveThemeCss(name: string): Promise<string>;
 
   /**
+   * 💡 注入されたすべての組み込みテーマCSSを解決し、オブジェクトマップとして返却する
+   * @returns テーマパスをキー、CSS生テキストを値とするオブジェクトのPromise
+   */
+  resolveAllBuiltinThemes(): Promise<Record<string, string>>;
+
+  /**
    * 指定された静的アセットのテキスト内容を直接解決する
    * @param path - 静的アセットの相対パス
    * @returns テキスト内容のPromise

@@ -46,6 +46,26 @@ export const portableProvider: IAssetProvider = {
   },
 
   /**
+   * 💡 埋め込まれたテーマを並列で一括解決し、マップとして返却
+   */
+  async resolveAllBuiltinThemes(): Promise<Record<string, string>> {
+    const builtinThemes: Record<string, string> = {};
+    const themeList = (globalThis as any).BuiltinThemesList || [];
+
+    await Promise.all(
+      themeList.map(async (themePath: string) => {
+        try {
+          builtinThemes[themePath] = await this.resolveThemeCss(themePath);
+        } catch (error) {
+          console.error(`Failed to resolve builtin theme: ${themePath}`, error);
+        }
+      }),
+    );
+
+    return builtinThemes;
+  },
+
+  /**
    * アセットが存在しない場合は明示的に例外をスローし、httpProvider と挙動を合わせる
    */
   async resolveAssetContent(path: string): Promise<string> {
