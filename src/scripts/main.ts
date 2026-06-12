@@ -3,7 +3,7 @@ import "../css/viewer.css";
 import { SlidesEngine } from "./SlideEngine2.ts";
 import { setupViewer } from "./viewer.ts";
 import { AssetProvider } from "./AssetProvider";
-import { FileDropScanner, ScannedFile } from "./FileDropScanner";
+import { FileDropScanner, type ScannedFile } from "./FileDropScanner";
 
 interface SlidesResult {
   title?: string;

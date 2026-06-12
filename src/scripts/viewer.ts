@@ -1,4 +1,5 @@
 import { AssetProvider } from "./AssetProvider";
+import { PptxExportController } from "./PptxExportController";
 
 const BASE_WIDTH = 1280;
 const BASE_HEIGHT = 720;
@@ -122,7 +123,6 @@ export async function setupViewer(slidesHtml: string): Promise<void> {
       }
     }
 
-    // メッセージ通信によるプレゼンターとの同期処理
     window.addEventListener("message", async (e) => {
       if (!e.data) return;
       if (e.data.type === "presenter_ready") {
@@ -259,64 +259,17 @@ export async function setupViewer(slidesHtml: string): Promise<void> {
         pptxBtn.disabled = true;
         pptxBtn.title = "PPTX生成中...";
 
-        // 一時的なエクスポート用iframeを画面外に作成
-        const exportIframe = document.createElement("iframe");
-        exportIframe.style.position = "absolute";
-        exportIframe.style.left = "-9999px";
-        exportIframe.style.top = "-9999px";
-        exportIframe.style.width = "1280px";
-        exportIframe.style.height = "720px";
-        exportIframe.style.border = "none";
-
-        const cleanup = () => {
-          if (document.body.contains(exportIframe)) {
-            document.body.removeChild(exportIframe);
-          }
-          delete (window as any).onPptxExportComplete;
-          delete (window as any).onPptxExportError;
+        try {
+          await PptxExportController.export({ slidesHtml, fileName });
+          alert("PPTXのエクスポートが完了しました。");
+        } catch (err: any) {
+          alert(
+            `PPTXのエクスポートに失敗しました:\n${err.message || String(err)}`,
+          );
+        } finally {
           pptxBtn.disabled = false;
           pptxBtn.title = "pptxに出力";
-        };
-
-        (window as any).onPptxExportComplete = () => {
-          cleanup();
-          alert("PPTXのエクスポートが完了しました。");
-        };
-
-        (window as any).onPptxExportError = (msg: string) => {
-          cleanup();
-          alert(`PPTXのエクスポートに失敗しました:\n${msg}`);
-        };
-
-        const pptxExportTemplate =
-          await AssetProvider.resolveAssetContent("pptx_export.html");
-        const pptxExportScript =
-          await AssetProvider.resolveScriptTag("dist/pptxExport.js");
-        const pptxExportHtml = pptxExportTemplate.replace(
-          "<!-- EXPORT_SCRIPT_TAG -->",
-          () => pptxExportScript,
-        );
-        exportIframe.srcdoc = pptxExportHtml;
-
-        exportIframe.onload = async () => {
-          const exportWin = exportIframe.contentWindow as any;
-          if (exportWin && exportWin.startExport) {
-            const slidesCss = await AssetProvider.resolveAssetContent(
-              "src/css/slide_root.css",
-            );
-            exportWin.startExport({
-              slidesHtml,
-              slidesCss,
-              fileName,
-            });
-          } else {
-            (window as any).onPptxExportError(
-              "エクスポートモジュールの読み込みに失敗しました。",
-            );
-          }
-        };
-
-        document.body.appendChild(exportIframe);
+        }
       };
     }
 

@@ -60,7 +60,7 @@ try {
   const EmbeddedAssets = {
     "src/viewer.html": viewerTemplate,
     "src/presenter.html": presenterTemplate,
-    "pptx_export.html": pptxExportTemplate,
+    "src/pptx_export.html": pptxExportTemplate,
     "dist/presenter.js": compiledPresenterJs,
     "dist/pptxExport.js": compiledPptxExportJs,
     "src/css/presenter.css": await Bun.file("./src/css/presenter.css").text(),
