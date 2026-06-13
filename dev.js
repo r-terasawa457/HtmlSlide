@@ -1,15 +1,15 @@
 import { join } from "path";
 import { watch } from "fs";
-import { Glob } from "bun";
-import { bunPluginSvelte } from "bun-plugin-svelte";
+import { Glob, plugin } from "bun";
+import { SveltePlugin } from "bun-plugin-svelte";
 
-plugin(
-  bunPluginSvelte({
-    compilerOptions: {
-      css: "injected", // 単一HTML出力を容易にするため、CSSはJSにインジェクト
-    },
-  }),
-);
+const sveltePluginInstance = SveltePlugin({
+  compilerOptions: {
+    css: "injected", // 単一HTML出力を容易にするため、CSSはJSにインジェクト
+  },
+});
+
+plugin(sveltePluginInstance);
 
 const PORT = 3000;
 const connectedSockets = new Set();
@@ -18,32 +18,39 @@ const glob = new Glob("**/*.css");
 const themeFiles = Array.from(glob.scanSync({ cwd: "./src/theme" }));
 const themeListStr = JSON.stringify(themeFiles);
 
-// 1. main.ts と presenter.ts の双方を並行してwatch監視コンパイル起動
-Bun.spawn(
-  [
-    "bun",
-    "build",
-    "./src/scripts/main.ts",
-    "./src/scripts/presenter.ts",
-    "--outdir",
-    "./dist",
-    "--watch",
-    "--target=browser",
-    "--format=esm",
-  ],
-  {
-    stdout: "inherit",
-    stderr: "inherit",
-  },
-);
+// プログラムベースのビルド関数
+async function rebuild() {
+  console.log("\x1b[36m[Bun Dev]\x1b[0m Compiling scripts...");
+  const result = await Bun.build({
+    entrypoints: ["./src/scripts/main.ts", "./src/scripts/presenter.ts"],
+    outdir: "./dist",
+    target: "browser",
+    format: "esm",
+    plugins: [sveltePluginInstance],
+  });
 
-watch("./dist", (eventType, filename) => {
-  if (filename && (filename.endsWith(".js") || filename.endsWith(".css"))) {
-    setTimeout(() => {
-      for (const ws of connectedSockets) {
-        ws.send(JSON.stringify({ type: "reload" }));
-      }
-    }, 50);
+  if (!result.success) {
+    console.error("❌ Programmatic rebuild failed:", result.logs);
+  } else {
+    console.log("\x1b[32m[Bun Dev]\x1b[0m Compilation success.");
+  }
+}
+
+// 初回ビルド
+await rebuild();
+
+// ソースコードの変更を監視して再ビルドを実行
+watch("./src", { recursive: true }, async (eventType, filename) => {
+  if (
+    filename &&
+    (filename.endsWith(".ts") ||
+      filename.endsWith(".svelte") ||
+      filename.endsWith(".css"))
+  ) {
+    await rebuild();
+    for (const ws of connectedSockets) {
+      ws.send(JSON.stringify({ type: "reload" }));
+    }
   }
 });
 
