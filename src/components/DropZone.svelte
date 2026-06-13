@@ -3,13 +3,9 @@
   import { FileDropScanner, type ScannedFile } from "../scripts/FileDropScanner";
   import { SlidesEngine } from "../scripts/SlideEngine2";
   import { AssetProvider } from "../scripts/AssetProvider";
-  import { viewerState } from "../scripts/ViewerState.svelte";
+  import { getAppState } from "../states/AppState.svelte";
 
-  interface Props {
-    onLoad: () => void;
-  }
-  let { onLoad }: Props = $props();
-
+  const appState = getAppState();
   let dropZoneEl = $state<HTMLElement | null>(null);
   let scanner: FileDropScanner | null = null;
 
@@ -131,11 +127,11 @@
       html: string;
     };
 
-    viewerState.title = result.title || mdTitle;
-    viewerState.slidesHtml = result.html;
-    viewerState.assetsMap = assetsMap;
-
-    onLoad();
+    // AppStateへの確実なデータ流し込み
+    appState.title = result.title || mdTitle;
+    appState.slidesHtml = result.html;
+    appState.assetsMap = assetsMap;
+    appState.isLoaded = true;
   }
 </script>
 

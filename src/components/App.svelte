@@ -3,28 +3,36 @@
   import DropZone from "./DropZone.svelte";
   import ControlBar from "./Viewer/ControlBar.svelte";
   import ViewerCore from "./Viewer/ViewerCore.svelte";
-  import { viewerState } from "../scripts/ViewerState.svelte";
+  import PrintManager from "./Print/PrintManager.svelte";
+  import { initAppState } from "../states/AppState.svelte";
+  import { initViewerState } from "../states/ViewerState.svelte";
 
-  let isLoaded = $state(false);
-  let refPrint = $state<{ print: () => void }>({ print: () => {} });
+  const appState = initAppState();
+  const viewerState = initViewerState();
 
-  function handleLoad() {
-    isLoaded = true;
-  }
-
-  // タイトルのリアクティブ変更
   $effect(() => {
-    if (viewerState.title) {
-      document.title = viewerState.title;
+    if (appState.title) {
+      document.title = appState.title;
+    }
+  });
+
+  $effect(() => {
+    const page = viewerState.currentPage;
+    if (appState.presenterWindow) {
+      appState.presenterWindow.postMessage({ type: "sync_page", page }, "*");
     }
   });
 </script>
 
-{#if !isLoaded}
-  <DropZone onLoad={handleLoad} />
+{#if !appState.isLoaded}
+  <DropZone />
 {:else}
   <div id="viewer-ui">
-    <ControlBar onPrint={() => refPrint.print()} />
-    <ViewerCore bind:refPrint />
+    <ControlBar />
+    <ViewerCore />
   </div>
+
+  {#if appState.isPrintRequested}
+    <PrintManager />
+  {/if}
 {/if}
