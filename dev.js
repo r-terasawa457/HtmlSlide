@@ -1,6 +1,15 @@
 import { join } from "path";
 import { watch } from "fs";
 import { Glob } from "bun";
+import { bunPluginSvelte } from "bun-plugin-svelte";
+
+plugin(
+  bunPluginSvelte({
+    compilerOptions: {
+      css: "injected", // 単一HTML出力を容易にするため、CSSはJSにインジェクト
+    },
+  }),
+);
 
 const PORT = 3000;
 const connectedSockets = new Set();

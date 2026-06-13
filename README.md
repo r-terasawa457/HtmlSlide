@@ -59,8 +59,6 @@ htmlslide/
 │   │   ├── plugins/
 │   │   │   └── markdown-it/
 │   │   │       └── slideEnginePlugin/ # スライド構造化・変数置換コアプラグイン
-│   │   │           └── test/
-│   │   ├── test/                # スクリプト単体テスト等
 │   │   ├── main.ts              # アプリケーションのメインエントリー。
 │   │   ├── FileDropScanner.ts   # D&Dおよびファイル走査制御
 │   │   ├── SlideEngine2.ts      # markdown-itの初期化・ルール定義・レンダリング集約

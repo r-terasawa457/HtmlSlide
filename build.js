@@ -1,6 +1,14 @@
 import { join } from "path";
 import { Glob } from "bun";
+import { bunPluginSvelte } from "bun-plugin-svelte";
 
+plugin(
+  bunPluginSvelte({
+    compilerOptions: {
+      css: "injected", // 単一HTML出力を容易にするため、CSSはJSにインジェクト
+    },
+  }),
+);
 console.log(
   "\x1b[36m[Bun Build]\x1b[0m Starting compilation & Base64 encapsulated bundling...",
 );

@@ -8,7 +8,9 @@
     "@types/bun": "latest",
     "@types/js-yaml": "^4.0.9",
     "@types/markdown-it": "^14.1.2",
-    "happy-dom": "^20.10.2"
+    "bun-plugin-svelte": "^0.0.6",
+    "happy-dom": "^20.10.2",
+    "svelte": "^5.56.3"
   },
   "peerDependencies": {
     "typescript": "^5"
