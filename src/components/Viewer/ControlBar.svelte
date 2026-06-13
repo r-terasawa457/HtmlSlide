@@ -1,4 +1,8 @@
 <script lang="ts">
+  /**
+   * @component ControlBar
+   * @description ビューアの操作ツールバー。ページの移動、ズーム倍率の変更、表示モードの切り替え、ステージビュー（外部ウィンドウ）の起動、およびPPTX/PDF出力のトリガーを提供します。
+   */
   import { getAppState } from "../../states/AppState.svelte";
   import { getViewerState } from "../../states/ViewerState.svelte";
   import { AssetProvider } from "../../scripts/AssetProvider";
@@ -16,17 +20,22 @@
   }
 
   function handleZoomIn() {
-    viewerState.currentMode = "CUSTOM";
+    viewerState.zoomMode = "CUSTOM";
     viewerState.currentZoom += 0.1;
   }
 
   function handleZoomOut() {
-    viewerState.currentMode = "CUSTOM";
+    viewerState.zoomMode = "CUSTOM";
     viewerState.currentZoom = Math.max(0.1, viewerState.currentZoom - 0.1);
   }
 
-  function setZoomMode(mode: typeof viewerState.currentMode) {
-    viewerState.currentMode = mode;
+  function setZoomMode(mode: typeof viewerState.zoomMode) {
+    viewerState.zoomMode = mode;
+  }
+
+  function handleModeChange(e: Event) {
+    const target = e.target as HTMLSelectElement;
+    viewerState.switchViewMode(target.value as any);
   }
 
   async function handleExportPptx() {
@@ -47,13 +56,14 @@
     }
   }
 
-  async function handleOpenPresenter() {
-    const presenterUrl = await AssetProvider.resolveCompositeHtmlUrl("src/presenter.html");
+  async function handleOpenStageView() {
+    const stageUrl = await AssetProvider.resolveCompositeHtmlUrl("src/presenter.html");
     const width = 1280;
     const height = 720;
-    appState.presenterWindow = window.open(
-      presenterUrl,
-      "presWin",
+
+    viewerState.stageWindow = window.open(
+      stageUrl,
+      "stageWin",
       `width=${width},height=${height},menubar=no,toolbar=no,location=no,status=no`,
     );
   }
@@ -62,7 +72,16 @@
 <div id="toolbar">
   <div class="toolbar-section">
     <span>Slide Presentation</span>
+    <div class="separator"></div>
+    <div class="toolbar-item">
+      <select value={viewerState.currentMode} onchange={handleModeChange} style="padding: 4px; border-radius: 4px; background: #333; color: #fff; border: 1px solid #555;">
+        <option value="SCROLL">Scroll View</option>
+        <option value="STANDALONE_PRES">Standalone Pres</option>
+        <option value="CONSOLE_PRES">Console Pres</option>
+      </select>
+    </div>
   </div>
+  
   <div class="toolbar-section">
     <div class="toolbar-item">
       <input
@@ -76,6 +95,7 @@
       <span>/ <span>{viewerState.totalPages}</span></span>
     </div>
     <div class="separator"></div>
+    
     <div class="toolbar-item">
       <button onclick={handleZoomOut} title="縮小">
         <svg viewBox="0 0 24 24"><path d="M19 13H5v-2h14v2z" /></svg>
@@ -95,7 +115,7 @@
     <div class="separator"></div>
     <div class="toolbar-item">
       <button
-        class:active={viewerState.currentMode === "ORIGINAL"}
+        class:active={viewerState.zoomMode === "ORIGINAL"}
         onclick={() => setZoomMode("ORIGINAL")}
         title="100%"
       >
@@ -104,7 +124,7 @@
         </svg>
       </button>
       <button
-        class:active={viewerState.currentMode === "CUSTOM"}
+        class:active={viewerState.zoomMode === "CUSTOM"}
         onclick={() => setZoomMode("CUSTOM")}
         title="カスタム"
       >
@@ -113,7 +133,7 @@
         </svg>
       </button>
       <button
-        class:active={viewerState.currentMode === "FIT_HEIGHT"}
+        class:active={viewerState.zoomMode === "FIT_HEIGHT"}
         onclick={() => setZoomMode("FIT_HEIGHT")}
         title="高さ合わせ"
       >
@@ -122,7 +142,7 @@
         </svg>
       </button>
       <button
-        class:active={viewerState.currentMode === "FIT_WIDTH"}
+        class:active={viewerState.zoomMode === "FIT_WIDTH"}
         onclick={() => setZoomMode("FIT_WIDTH")}
         title="幅合わせ"
       >
@@ -132,13 +152,14 @@
       </button>
     </div>
   </div>
+  
   <div class="toolbar-section">
     <button onclick={handleExportPptx} disabled={isExporting} title={isExporting ? "PPTX生成中..." : "pptxに出力"}>
       <svg viewBox="0 0 24 24">
         <path d="M19 3H5c-1.1 0-2 .9-2 2v14c0 1.1.9 2 2 2h14c1.1 0 2-.9 2-2V5c0-1.1-.9-2-2-2zm-5 14H10v-4H7l5-5 5 5h-3v4z" />
       </svg>
     </button>
-    <button onclick={handleOpenPresenter} title="プレゼンテーションモード">
+    <button onclick={handleOpenStageView} title="ステージビュー表示">
       <svg viewBox="0 0 24 24">
         <path d="M21 3H3c-1.1 0-2 .9-2 2v12c0 1.1.9 2 2 2h5v2h8v-2h5c1.1 0 1.99-.9 1.99-2L23 5c0-1.1-.9-2-2-2zm0 14H3V5h18v12z" />
       </svg>

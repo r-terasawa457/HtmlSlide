@@ -22,7 +22,7 @@ const themeListStr = JSON.stringify(themeFiles);
 async function rebuild() {
   console.log("\x1b[36m[Bun Dev]\x1b[0m Compiling scripts...");
   const result = await Bun.build({
-    entrypoints: ["./src/scripts/main.ts", "./src/scripts/presenter.ts"],
+    entrypoints: ["./src/scripts/main.ts"],
     outdir: "./dist",
     target: "browser",
     format: "esm",

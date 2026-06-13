@@ -1,25 +1,22 @@
 <script lang="ts">
+  /**
+   * @component App
+   * @description アプリケーションのエントリーポイント。
+   * アプリケーション全体のグローバル状態（AppState, ViewerState）を初期化し、ファイルの読み込み状態（DropZone）やメインビューア（ViewerMain）、印刷管理（PrintManager）の出し分けを統括します。
+   */
   import "../css/viewer.css";
   import DropZone from "./DropZone.svelte";
-  import ControlBar from "./Viewer/ControlBar.svelte";
-  import ViewerCore from "./Viewer/ViewerCore.svelte";
+  import ViewerMain from "./ViewerMain.svelte";
   import PrintManager from "./Print/PrintManager.svelte";
   import { initAppState } from "../states/AppState.svelte";
   import { initViewerState } from "../states/ViewerState.svelte";
 
   const appState = initAppState();
-  const viewerState = initViewerState();
+  initViewerState();
 
   $effect(() => {
     if (appState.title) {
       document.title = appState.title;
-    }
-  });
-
-  $effect(() => {
-    const page = viewerState.currentPage;
-    if (appState.presenterWindow) {
-      appState.presenterWindow.postMessage({ type: "sync_page", page }, "*");
     }
   });
 </script>
@@ -27,10 +24,7 @@
 {#if !appState.isLoaded}
   <DropZone />
 {:else}
-  <div id="viewer-ui">
-    <ControlBar />
-    <ViewerCore />
-  </div>
+  <ViewerMain />
 
   {#if appState.isPrintRequested}
     <PrintManager />
