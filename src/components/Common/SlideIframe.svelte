@@ -1,5 +1,5 @@
 <script lang="ts">
-  import { AssetProvider } from "../../scripts/AssetProvider";
+  import cssContent from "../../css/slide_root.css" with { type: "text" };
 
   /**
    * スライドのHTMLを隔離されたiframe内に安全にレンダリングする共通コンポーネント
@@ -21,19 +21,17 @@
       return;
     }
 
-    AssetProvider.resolveStyleTag("src/css/slide_root.css").then((cssContent) => {
-      srcdoc = `<!DOCTYPE html>
+    srcdoc = `<!DOCTYPE html>
 <html lang="ja">
 <head>
   <meta charset="UTF-8" />
-  ${cssContent}
+  <style>${cssContent}</style>
 </head>
 <body class="${isPresentMode ? "present-mode" : ""}">
   ${slidesHtml}
 </body>
 </html>`;
     });
-  });
 
   /**
    * iframeの読み込み完了（onload）イベントをハンドリングし、親コンポーネントへ通知する
