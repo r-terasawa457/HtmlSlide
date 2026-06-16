@@ -16,7 +16,7 @@ export const httpProvider: IAssetProvider = {
   },
 
   async resolveThemeCss(name: string): Promise<string> {
-    return this.resolveAssetContent(`themes/${name}`);
+    return this.resolveAssetContent(`theme/${name}`);
   },
 
   /**

@@ -1,6 +1,6 @@
 <script lang="ts">
   import { mount, unmount, onDestroy } from "svelte";
-  import cssContent from "../../css/slide_root.css" with { type: "text" };
+  import cssContent from "../../css/slide_root.css?raw";
   import SlideInner from "./SlideInner.svelte";
 
   interface Props {
