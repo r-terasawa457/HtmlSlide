@@ -1,6 +1,15 @@
 import { join } from "path";
 import { watch } from "fs";
-import { Glob } from "bun";
+import { Glob, plugin } from "bun";
+import { SveltePlugin } from "bun-plugin-svelte";
+
+const sveltePluginInstance = SveltePlugin({
+  compilerOptions: {
+    css: "injected",
+  },
+});
+
+plugin(sveltePluginInstance);
 
 const PORT = 3000;
 const connectedSockets = new Set();
@@ -9,32 +18,44 @@ const glob = new Glob("**/*.css");
 const themeFiles = Array.from(glob.scanSync({ cwd: "./src/theme" }));
 const themeListStr = JSON.stringify(themeFiles);
 
-// 1. main.ts と presenter.ts の双方を並行してwatch監視コンパイル起動
-Bun.spawn(
-  [
-    "bun",
-    "build",
-    "./src/scripts/main.ts",
-    "./src/scripts/presenter.ts",
-    "--outdir",
-    "./dist",
-    "--watch",
-    "--target=browser",
-    "--format=esm",
-  ],
-  {
-    stdout: "inherit",
-    stderr: "inherit",
-  },
-);
+/**
+ * 開発に必要なすべてのスクリプト（メイン、プレゼンター、エクスポート）をコンパイルします。
+ */
+async function rebuild() {
+  console.log("\x1b[36m[Bun Dev]\x1b[0m Compiling scripts...");
+  const result = await Bun.build({
+    // 💡 プレゼンター、エクスポート用スクリプトもコンパイル対象に含める
+    entrypoints: [
+      "./src/scripts/main.ts",
+      "./src/scripts/presenter.ts",
+      "./src/scripts/pptxExport.ts",
+    ],
+    outdir: "./dist",
+    target: "browser",
+    format: "esm",
+    plugins: [sveltePluginInstance],
+  });
 
-watch("./dist", (eventType, filename) => {
-  if (filename && (filename.endsWith(".js") || filename.endsWith(".css"))) {
-    setTimeout(() => {
-      for (const ws of connectedSockets) {
-        ws.send(JSON.stringify({ type: "reload" }));
-      }
-    }, 50);
+  if (!result.success) {
+    console.error("❌ Programmatic rebuild failed:", result.logs);
+  } else {
+    console.log("\x1b[32m[Bun Dev]\x1b[0m Compilation success.");
+  }
+}
+
+await rebuild();
+
+watch("./src", { recursive: true }, async (eventType, filename) => {
+  if (
+    filename &&
+    (filename.endsWith(".ts") ||
+      filename.endsWith(".svelte") ||
+      filename.endsWith(".css"))
+  ) {
+    await rebuild();
+    for (const ws of connectedSockets) {
+      ws.send(JSON.stringify({ type: "reload" }));
+    }
   }
 });
 
@@ -75,7 +96,6 @@ Bun.serve({
       if (await file.exists()) {
         let htmlText = await file.text();
 
-        // 💡 開発環境用ブラウザにも BuiltinThemesList を注入
         const clientScript = `
           <script>
             (function() {
@@ -101,9 +121,8 @@ Bun.serve({
       }
     }
 
-    // 💡 開発環境用アセットのルーティングを完全に自動化 (ハードコードの削除)
     if (pathname.startsWith("/themes/")) {
-      const themePath = pathname.slice(8); // "/themes/" を除去
+      const themePath = pathname.slice(8);
       const themeFile = Bun.file(join("./src/theme", themePath));
 
       if (await themeFile.exists()) {
@@ -116,6 +135,10 @@ Bun.serve({
     let file = Bun.file(join(".", pathname));
     if (await file.exists()) return new Response(file);
 
+    // 💡 AssetProvider が要求する src フォルダ直下（presenter.html 等）へのルーティングを通す
+    file = Bun.file(join("./src", pathname.replace(/^\/src\//, "/")));
+    if (await file.exists()) return new Response(file);
+
     file = Bun.file(join("./static", pathname));
     if (await file.exists()) return new Response(file);
 
@@ -124,5 +147,5 @@ Bun.serve({
 });
 
 console.log(
-  `\x1b[36m[Bun Server]\x1b[0m Running at \x1b[4mhttp://localhost:${PORT}\x1b[0m (Live Reload: Active)`,
+  `\x1b[36m[Bun Server]\x1b[0m Running at \x1b[4mhttp://localhost:${PORT}\x1b[0m`,
 );

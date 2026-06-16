@@ -1,5 +1,14 @@
 import { join } from "path";
-import { Glob } from "bun";
+import { Glob, plugin } from "bun";
+import { SveltePlugin } from "bun-plugin-svelte";
+
+const sveltePluginInstance = SveltePlugin({
+  compilerOptions: {
+    css: "injected", // 単一HTML出力を容易にするため、CSSはJSにインジェクト
+  },
+});
+
+plugin(sveltePluginInstance);
 
 console.log(
   "\x1b[36m[Bun Build]\x1b[0m Starting compilation & Base64 encapsulated bundling...",
@@ -12,6 +21,7 @@ const presenterBuildResult = await Bun.build({
   minify: true,
   target: "browser",
   format: "esm",
+  plugins: [sveltePluginInstance],
 });
 
 if (!presenterBuildResult.success) {
@@ -26,6 +36,7 @@ const mainBuildResult = await Bun.build({
   minify: true,
   target: "browser",
   format: "esm",
+  plugins: [sveltePluginInstance],
 });
 
 if (!mainBuildResult.success) {
@@ -40,6 +51,7 @@ const pptxExportBuildResult = await Bun.build({
   minify: true,
   target: "browser",
   format: "esm",
+  plugins: [sveltePluginInstance],
 });
 
 if (!pptxExportBuildResult.success) {
@@ -50,7 +62,6 @@ if (!pptxExportBuildResult.success) {
 try {
   /** @type {Record<string, string>} 埋め込みアセットのキーとローカルパスのマッピング定義 */
   const assetMapping = {
-    "src/viewer.html": "./src/viewer.html",
     "src/presenter.html": "./src/presenter.html",
     "src/pptx_export.html": "./src/pptx_export.html",
     "dist/presenter.js": "./dist/presenter.js",
@@ -73,9 +84,15 @@ try {
   const assetPromises = assetKeys.map((key) =>
     Bun.file(assetMapping[key]).text(),
   );
+
+  const mainCssFile = Bun.file("./dist/main.css");
+  const compiledCssPromise = mainCssFile
+    .exists()
+    .then((exists) => (exists ? mainCssFile.text() : ""));
+
   const coreFilesPromises = [
     Bun.file("./dist/main.js").text(),
-    Bun.file("./dist/main.css").text(),
+    compiledCssPromise,
     Bun.file("./index.html").text(),
   ];
 
@@ -105,12 +122,17 @@ try {
     const jsPattern =
       /<script[^>]*src=["']\/dist\/main\.js["'][^>]*>([\s\S]*?<\/script>)?/i;
 
-    return htmlTemplate
-      .replace(cssPattern, () => "<style>" + cssContent + "</style>")
-      .replace(
-        jsPattern,
-        () => '<script type="module">' + jsContent + "</script>",
+    let resultHtml = htmlTemplate;
+    if (cssPattern.test(resultHtml)) {
+      resultHtml = resultHtml.replace(cssPattern, () =>
+        cssContent ? "<style>" + cssContent + "</style>" : "",
       );
+    }
+    resultHtml = resultHtml.replace(
+      jsPattern,
+      () => '<script type="module">' + jsContent + "</script>",
+    );
+    return resultHtml;
   }
 
   const bundleHtml = inlineAssets(sourceHtml, compiledCss, compiledMainJs);

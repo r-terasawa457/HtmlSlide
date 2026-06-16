@@ -7,10 +7,17 @@
     background: transparent;
     -ms-overflow-style: none;
     scrollbar-width: none;
+    margin: 0;
+    padding: 0;
   }
 
   body::-webkit-scrollbar {
     display: none;
+  }
+
+  #slide-root {
+    width: 100%;
+    height: 100%;
   }
 
   .slides {
@@ -47,7 +54,6 @@
   }
 
   /* 1. ツールバー、フルスクリーンヒントなどの画面専用UI要素を完全に非表示 */
-  #toolbar,
   #fullscreen-hint,
   .separator,
   button,
@@ -61,20 +67,6 @@
     overflow: visible !important;
     height: auto !important;
     background: #fff !important;
-  }
-
-  /* 3. 画面表示用の動的インラインスタイルやtransformズームを完全リセット */
-  #viewer-ui,
-  #viewer-container,
-  #slides-scale-wrapper {
-    display: block !important;
-    overflow: visible !important;
-    height: auto !important;
-    width: auto !important;
-    margin: 0 !important;
-    padding: 0 !important;
-    transform: none !important;
-    position: static !important;
   }
 
   /* 4. PowerPoint標準サイズ（16:9）で出力用紙を定義 */
