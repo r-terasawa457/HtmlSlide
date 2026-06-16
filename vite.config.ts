@@ -62,6 +62,15 @@ export default defineConfig(({ command }) => {
       }),
       viteSingleFile(),
     ],
+    resolve: {
+      conditions: ["browser"],
+    },
+    test: {
+      environment: "jsdom",
+      globals: true,
+      setupFiles: ["./vitest.setup.ts"],
+      include: ["src/**/*.{test,spec}.ts"],
+    },
     define: {
       "globalThis.BuiltinThemesList": JSON.stringify(themeFiles),
       "globalThis.EmbeddedAssets":
