@@ -5,7 +5,7 @@ import { SveltePlugin } from "bun-plugin-svelte";
 
 const sveltePluginInstance = SveltePlugin({
   compilerOptions: {
-    css: "injected", // 単一HTML出力を容易にするため、CSSはJSにインジェクト
+    css: "injected",
   },
 });
 
@@ -18,11 +18,18 @@ const glob = new Glob("**/*.css");
 const themeFiles = Array.from(glob.scanSync({ cwd: "./src/theme" }));
 const themeListStr = JSON.stringify(themeFiles);
 
-// プログラムベースのビルド関数
+/**
+ * 開発に必要なすべてのスクリプト（メイン、プレゼンター、エクスポート）をコンパイルします。
+ */
 async function rebuild() {
   console.log("\x1b[36m[Bun Dev]\x1b[0m Compiling scripts...");
   const result = await Bun.build({
-    entrypoints: ["./src/scripts/main.ts"],
+    // 💡 プレゼンター、エクスポート用スクリプトもコンパイル対象に含める
+    entrypoints: [
+      "./src/scripts/main.ts",
+      "./src/scripts/presenter.ts",
+      "./src/scripts/pptxExport.ts",
+    ],
     outdir: "./dist",
     target: "browser",
     format: "esm",
@@ -36,10 +43,8 @@ async function rebuild() {
   }
 }
 
-// 初回ビルド
 await rebuild();
 
-// ソースコードの変更を監視して再ビルドを実行
 watch("./src", { recursive: true }, async (eventType, filename) => {
   if (
     filename &&
@@ -91,7 +96,6 @@ Bun.serve({
       if (await file.exists()) {
         let htmlText = await file.text();
 
-        // 💡 開発環境用ブラウザにも BuiltinThemesList を注入
         const clientScript = `
           <script>
             (function() {
@@ -117,9 +121,8 @@ Bun.serve({
       }
     }
 
-    // 💡 開発環境用アセットのルーティングを完全に自動化 (ハードコードの削除)
     if (pathname.startsWith("/themes/")) {
-      const themePath = pathname.slice(8); // "/themes/" を除去
+      const themePath = pathname.slice(8);
       const themeFile = Bun.file(join("./src/theme", themePath));
 
       if (await themeFile.exists()) {
@@ -132,6 +135,10 @@ Bun.serve({
     let file = Bun.file(join(".", pathname));
     if (await file.exists()) return new Response(file);
 
+    // 💡 AssetProvider が要求する src フォルダ直下（presenter.html 等）へのルーティングを通す
+    file = Bun.file(join("./src", pathname.replace(/^\/src\//, "/")));
+    if (await file.exists()) return new Response(file);
+
     file = Bun.file(join("./static", pathname));
     if (await file.exists()) return new Response(file);
 
@@ -140,5 +147,5 @@ Bun.serve({
 });
 
 console.log(
-  `\x1b[36m[Bun Server]\x1b[0m Running at \x1b[4mhttp://localhost:${PORT}\x1b[0m (Live Reload: Active)`,
+  `\x1b[36m[Bun Server]\x1b[0m Running at \x1b[4mhttp://localhost:${PORT}\x1b[0m`,
 );

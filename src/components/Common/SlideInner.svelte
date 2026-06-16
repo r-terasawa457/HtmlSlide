@@ -30,7 +30,7 @@
       if (!pageAttr) return;
 
       // 1始まりのページ番号文字列を0始まりのインデックスに変換
-      const pageIndex = parseInt(pageAttr, 10) - 1;
+      const pageIndex = parseInt(pageAttr, 10);
       
       const isVisible = config.viewMode === "all"
         ? !config.hiddenPageIndices.has(pageIndex)
