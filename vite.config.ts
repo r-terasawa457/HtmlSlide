@@ -69,7 +69,7 @@ export default defineConfig(({ command }) => {
       environment: "jsdom",
       globals: true,
       setupFiles: ["./vitest.setup.ts"],
-      include: ["src/**/*.{test,spec}.ts"],
+      include: ["src/**/*.{test,spec,test.svelte}.ts"],
     },
     define: {
       "globalThis.BuiltinThemesList": JSON.stringify(themeFiles),
