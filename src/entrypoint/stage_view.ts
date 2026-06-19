@@ -4,7 +4,7 @@
  * ルートコンポーネントである StageViewMain をマウントします。
  */
 import { mount } from "svelte";
-import StageViewMain from "../components/StageViewMain.svelte";
+import StageViewMain from "../components/Viewer/StageViewMain.svelte";
 
 mount(StageViewMain, {
   target: document.body,

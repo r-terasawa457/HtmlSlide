@@ -5,7 +5,7 @@
    */
   import "../css/app.css"; // Tailwind v4 のエントリーポイントに変更
   import DropZone from "./DropZone.svelte";
-  import ViewerMain from "./ViewerMain.svelte";
+  import ViewerMain from "./Viewer/ViewerMain.svelte";
   import PrintManager from "./Print/PrintManager.svelte";
   import { initAppState } from "../states/AppState.svelte";
   import { initViewerState } from "../states/ViewerState.svelte";

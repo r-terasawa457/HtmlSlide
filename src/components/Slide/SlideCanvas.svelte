@@ -66,6 +66,17 @@
     return Math.min(scaleX, scaleY);
   });
 
+  let offsetX = $derived(
+    containerWidth > totalInternalWidth * scale
+      ? (containerWidth - totalInternalWidth * scale) / 2
+      : 0
+  );
+  let offsetY = $derived(
+    containerHeight > totalInternalHeight * scale
+      ? (containerHeight - totalInternalHeight * scale) / 2
+      : 0
+  );
+
   /**
    * 自動計算されたスケール倍率を外部バインドへ同期するライフサイクル。
    */
@@ -317,19 +328,23 @@
     class="scroll-filler"
     style:width="{totalInternalWidth * scale}px"
     style:height="{totalInternalHeight * scale}px"
+    style:transform="translate({offsetX}px, {offsetY}px)"
+    style:transform-origin="top left"
   ></div>
 
-  <iframe
-    bind:this={iframeRef}
-    title="Slide Render Space"
-    class="slide-canvas"
-    style="
-      width: {scale > 0 ? containerWidth / scale : containerWidth}px;
-      height: {scale > 0 ? containerHeight / scale : containerHeight}px;
-      transform: scale({scale});
-      opacity: {hasMeasured ? 1 : 0};
-    "
-  ></iframe>
+  <div class="sticky-viewport">
+    <iframe
+      bind:this={iframeRef}
+      title="Slide Render Space"
+      class="slide-canvas"
+      style="
+        width: {scale > 0 ? containerWidth / scale : containerWidth}px;
+        height: {scale > 0 ? containerHeight / scale : containerHeight}px;
+        transform: translate({offsetX}px, {offsetY}px) scale({scale});
+        opacity: {hasMeasured ? 1 : 0};
+      "
+    ></iframe>
+  </div>
 </div>
 
 <style>
@@ -346,9 +361,19 @@
     left: 0;
   }
 
+  .sticky-viewport {
+    position: sticky;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    overflow: hidden;
+    pointer-events: none;
+  }
+
   .slide-canvas {
     border: none;
-    position: sticky;
+    position: absolute;
     top: 0;
     left: 0;
     transform-origin: top left;

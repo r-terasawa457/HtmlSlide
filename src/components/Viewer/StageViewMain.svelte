@@ -5,9 +5,9 @@
    * 独立したAppStateを初期化し、親ウィンドウから受信したスライドデータをマッピングして同期します。
    */
   import { onMount, onDestroy } from "svelte";
-  import { initAppState } from "../states/AppState.svelte";
-  import SlideCanvas from "./Slide/SlideCanvas.svelte";
-  import type { ParsedSlideData } from "./Slide/types";
+  import { initAppState } from "../../states/AppState.svelte";
+  import SlideCanvas from "../Slide/SlideCanvas.svelte";
+  import type { ParsedSlideData } from "../Slide/types";
 
   const appState = initAppState();
 
@@ -32,7 +32,6 @@
 
     renderMode = e.data.renderMode;
     currentPageIndex = e.data.currentPage - 1;
-    currentZoom = e.data.currentZoom;
     scrollTop = e.data.scrollTop;
 
     if (e.data.data !== undefined) {
@@ -60,7 +59,9 @@
   <SlideCanvas
     data={slideData}
     mode={renderMode === "SCROLL" ? "scroll" : "slide"}
-    fit_mode="none"
+    fit_mode="contain"
+    width="100%"
+    height="100%"
     bind:currentPageIndex
     bind:scale={currentZoom}
     bind:scrollTop
@@ -68,6 +69,14 @@
 </div>
 
 <style>
+  :global(html), :global(body) {
+    margin: 0;
+    padding: 0;
+    width: 100%;
+    height: 100%;
+    overflow: hidden;
+  }
+
   #stage-view-root {
     width: 100vw;
     height: 100vh;

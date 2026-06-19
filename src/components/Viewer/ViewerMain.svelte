@@ -4,11 +4,11 @@
    * @description 親ウィンドウのメイン画面表示を統括し、表示モードの切り替え制御、UIレイアウトの動的コンポーズ、および外部ステージウィンドウへの一方向同期メッセージングを担うマスターコンポーネント。
    */
   import { onMount, onDestroy } from "svelte";
-  import { getAppState } from "../states/AppState.svelte";
-  import { getViewerState } from "../states/ViewerState.svelte";
-  import ControlBar from "./Viewer/ControlBar.svelte";
-  import SlideCanvas from "./Slide/SlideCanvas.svelte";
-  import PresenterConsole from "./Panes/PresenterConsole.svelte";
+  import { getAppState } from "../../states/AppState.svelte";
+  import { getViewerState } from "../../states/ViewerState.svelte";
+  import ControlBar from "./ControlBar.svelte";
+  import SlideCanvas from "../Slide/SlideCanvas.svelte";
+  import PresenterConsole from "./PresenterConsole.svelte";
 
   const appState = getAppState();
   const viewerState = getViewerState();

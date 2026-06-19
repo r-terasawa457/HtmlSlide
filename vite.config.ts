@@ -1,62 +1,140 @@
-import { defineConfig } from "vite";
+import { defineConfig, build as viteBuild } from "vite";
 import { svelte } from "@sveltejs/vite-plugin-svelte";
 import { viteSingleFile } from "vite-plugin-singlefile";
 import tailwindcss from "@tailwindcss/vite";
 import { resolve } from "path";
-import { readFileSync, readdirSync } from "fs";
+import { readFileSync, readdirSync, rmSync } from "fs";
 
 /**
  * src/theme 内のCSSファイルを再帰的・動的に走査してリスト化する関数
  */
 function getThemeFiles(dir: string, baseDir = ""): string[] {
   const results: string[] = [];
-  const list = readdirSync(dir, { withFileTypes: true });
-  for (const file of list) {
-    const res = resolve(dir, file.name);
-    const relPath = baseDir ? `${baseDir}/${file.name}` : file.name;
-    if (file.isDirectory()) {
-      results.push(...getThemeFiles(res, relPath));
-    } else if (file.name.endsWith(".css")) {
-      results.push(relPath);
+  try {
+    const list = readdirSync(dir, { withFileTypes: true });
+    for (const file of list) {
+      const res = resolve(dir, file.name);
+      const relPath = baseDir ? `${baseDir}/${file.name}` : file.name;
+      if (file.isDirectory()) {
+        results.push(...getThemeFiles(res, relPath));
+      } else if (file.name.endsWith(".css")) {
+        results.push(relPath);
+      }
     }
+  } catch (e) {
+    // ディレクトリ未存在時はスキップ
   }
   return results;
 }
 
-export default defineConfig(({ command }) => {
+export default defineConfig(async ({ command }) => {
   const themeFiles = getThemeFiles(resolve(__dirname, "static/theme"));
-
-  // 文字列としてJSに埋め込むアセットの制御
   const embeddedAssets: Record<string, string> = {};
-  if (command === "build") {
-    const assetMapping: Record<string, string> = {
-      // 💡 サーバー上の絶対パス（スラッシュ始まり）をキーにします
-      "/src/entrypoint/stage_view.html": "./src/entrypoint/stage_view.html",
-      "/src/pptx_export.html": "./src/pptx_export.html",
-    };
 
-    for (const file of themeFiles) {
-      // テーマも /themes/filename.css という絶対パス形式のキーで登録
-      assetMapping[`/themes/${file}`] = `./src/theme/${file}`;
+  if (command === "build") {
+    // 💡 識別フラグ（isScript）を追加し、TS用のoutPathを直下に修正
+    const subApps = [
+      {
+        key: "/src/entrypoint/stage_view.html",
+        input: resolve(__dirname, "src/entrypoint/stage_view.html"),
+        outPath: resolve(__dirname, "dist-temp/src/entrypoint/stage_view.html"),
+        isScript: false,
+        isCompile: true,
+      },
+      {
+        key: "/src/pptx_export.html",
+        input: resolve(__dirname, "src/pptx_export.html"),
+        outPath: resolve(__dirname, "dist-temp/src/pptx_export.html"),
+        isScript: false,
+        isCompile: true,
+      },
+      {
+        key: "/src/scripts/pptxExport.ts",
+        input: resolve(__dirname, "src/scripts/pptxExport.ts"),
+        outPath: resolve(__dirname, "dist-temp/pptxExport.js"), // ライブラリモードで直下に出力されるため
+        isScript: true,
+        isCompile: true,
+      },
+      {
+        key: "/src/css/slide_root.css",
+        input: resolve(__dirname, "src/css/slide_root.css"),
+        isCompile: false,
+      },
+    ];
+
+    const tempDir = resolve(__dirname, "dist-temp");
+
+    for (const app of subApps) {
+      try {
+        if (app.isCompile === false) {
+          embeddedAssets[app.key] = readFileSync(app.input, "utf-8");
+          continue;
+        }
+        // 💡 HTMLとスクリプトでビルドオプションを動的に切り替える
+        const buildConfig: any = {
+          outDir: tempDir,
+          emptyOutDir: false,
+          target: "esnext",
+        };
+
+        if (app.isScript) {
+          buildConfig.lib = {
+            entry: app.input,
+            formats: ["es"], // 用途に応じて "iife" (即時実行関数) などに変更可能
+            fileName: () => "pptxExport.js",
+          };
+        } else {
+          buildConfig.assetsInlineLimit = 100000000;
+          buildConfig.rollupOptions = {
+            input: app.input,
+          };
+        }
+
+        await viteBuild({
+          configFile: false,
+          base: "./",
+          publicDir: false,
+          plugins: app.isScript
+            ? []
+            : [tailwindcss(), svelte({ emitCss: false }), viteSingleFile()],
+          build: buildConfig,
+          logLevel: "warn",
+        });
+
+        embeddedAssets[app.key] = readFileSync(app.outPath, "utf-8");
+      } catch (e) {
+        console.warn(
+          `[Vite Pre-build] Warning: Failed to compile ${app.key}`,
+          e,
+        );
+      }
     }
 
-    for (const [key, path] of Object.entries(assetMapping)) {
+    try {
+      rmSync(tempDir, { recursive: true, force: true });
+    } catch (e) {
+      // 削除失敗時は無視
+    }
+
+    for (const file of themeFiles) {
       try {
-        embeddedAssets[key] = readFileSync(resolve(__dirname, path), "utf-8");
+        embeddedAssets[`themes/${file}`] = readFileSync(
+          resolve(__dirname, `./static/theme/${file}`),
+          "utf-8",
+        );
       } catch (e) {
-        console.warn(`[Vite Build] Warning: Missing asset ${path}`);
+        console.warn(`[Vite Build] Warning: Missing theme asset ${file}`);
       }
     }
   }
 
   return {
+    base: "./",
     publicDir: "static",
     plugins: [
       tailwindcss(),
       svelte({
-        compilerOptions: {
-          css: "injected",
-        },
+        emitCss: false,
       }),
       viteSingleFile(),
     ],
@@ -79,17 +157,8 @@ export default defineConfig(({ command }) => {
       assetsInlineLimit: 100000000,
       chunkSizeWarningLimit: 100000000,
       rollupOptions: {
-        input: (command === "build"
-          ? { main: resolve(__dirname, "index.html") }
-          : {
-              main: resolve(__dirname, "index.html"),
-              presenter: resolve(__dirname, "src/entrypoint/stage_view.html"),
-              pptxExport: resolve(__dirname, "src/pptx_export.html"),
-            }) as Record<string, string>,
-        output: {
-          entryFileNames: "assets/[name].js",
-          chunkFileNames: "assets/[name].js",
-          assetFileNames: "assets/[name].[ext]",
+        input: {
+          main: resolve(__dirname, "index.html"),
         },
       },
     },
