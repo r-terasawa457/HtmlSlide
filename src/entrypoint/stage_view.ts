@@ -1,7 +1,7 @@
 /**
- * @file presenter.ts
+ * @file stage_view.ts
  * @description ステージビュー（外部ディスプレイ用ウィンドウ）のエントリーポイント。
- * ルートコンポーネントである StageViewMain を検知したターゲット要素に対してマウントします。
+ * ルートコンポーネントである StageViewMain をマウントします。
  */
 import { mount } from "svelte";
 import StageViewMain from "../components/StageViewMain.svelte";

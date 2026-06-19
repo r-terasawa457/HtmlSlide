@@ -82,11 +82,12 @@ htmlslide/
 ## 🛠️ 開発とビルド
 
 本プロジェクトはランタイムおよびビルドツールとして [Bun](https://bun.sh/) を使用しています。
+→viteに移行済み
 
 ### 開発サーバーの起動
 
 ```bash
-bun run dev.js
+bun run dev
 
 ```
 
@@ -96,7 +97,7 @@ bun run dev.js
 ### スタンドアロンHTMLのビルド
 
 ```bash
-bun run build.js
+bun run build
 
 ```
 

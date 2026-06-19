@@ -1,4 +1,6 @@
 import { setContext, getContext } from "svelte";
+import { getAppState } from "./AppState.svelte";
+import type { ParsedSlideData } from "../components/Slide/types";
 
 export type ViewMode = "SCROLL" | "STANDALONE_PRES" | "CONSOLE_PRES";
 export type ZoomMode = "ORIGINAL" | "CUSTOM" | "FIT_HEIGHT" | "FIT_WIDTH";
@@ -10,10 +12,62 @@ export interface ModeContext {
 }
 
 /**
+ * .slides を含む生HTML文字列を構造化された ParsedSlideData にパースします。
+ * @param html - パース対象のHTML文字列
+ */
+export function parseSlidesHtml(html: string): ParsedSlideData {
+  if (!html) {
+    return { containerAttrs: {}, commons: [], pages: [] };
+  }
+  const parser = new DOMParser();
+  const doc = parser.parseFromString(html, "text/html");
+  const slidesDiv = doc.querySelector(".slides");
+  if (!slidesDiv) {
+    return { containerAttrs: {}, commons: [], pages: [] };
+  }
+
+  // コンテナ属性の抽出
+  const containerAttrs: Record<string, string> = {};
+  for (const attr of Array.from(slidesDiv.attributes)) {
+    containerAttrs[attr.name] = attr.value;
+  }
+
+  const commons: string[] = [];
+  const pages: string[] = [];
+
+  // 子ノードを走査し、section.page と共通要素（スタイル、メタ等）に分類
+  for (const child of Array.from(slidesDiv.childNodes)) {
+    if (child.nodeType === 1) {
+      // Node.ELEMENT_NODE
+      const element = child as HTMLElement;
+      if (
+        element.tagName.toLowerCase() === "section" &&
+        element.classList.contains("page")
+      ) {
+        pages.push(element.outerHTML);
+      } else {
+        commons.push(element.outerHTML);
+      }
+    } else if (child.nodeType === 3) {
+      // Node.TEXT_NODE
+      const text = child.textContent?.trim();
+      if (text) {
+        commons.push(text);
+      }
+    }
+  }
+
+  return { containerAttrs, commons, pages };
+}
+
+/**
  * @class ViewerState
  * @description アプリケーションの画面表示モード、ズーム、および外部ステージウィンドウへの同期状態を統括管理する状態クラス。
  */
 export class ViewerState {
+  /** AppStateへの参照（初期化時にライフサイクル内で取得） */
+  private appState = getAppState();
+
   /** 親ウィンドウの現在の画面表示モード */
   currentMode = $state<ViewMode>("SCROLL");
 
@@ -33,10 +87,7 @@ export class ViewerState {
   /** 親がSCROLLモードのときのステージビューの表示形式設定 */
   stageDisplayMode = $state<StageDisplayMode>("SLIDE");
 
-  /** スライドの総ページ数 */
-  totalPages = $state(0);
-
-  /** 現在適用されている実際のズームスケール倍率 */
+  /** スライドの表示倍率 */
   currentZoom = $state(1.0);
 
   /** 描画コンポーネントへスクロール位置やページの強制変更命令を媒介するシグナル */
@@ -48,8 +99,30 @@ export class ViewerState {
     source: "init",
   });
 
+  /** パース済みのスライドデータ */
+  get slideData(): ParsedSlideData {
+    return parseSlidesHtml(this.appState.slidesHtml);
+  }
+
+  /** スライドの総ページ数 */
+  get totalPages(): number {
+    return this.slideData.pages.length;
+  }
+
   /** 現在の表示モードにおいてアクティブなページ番号 */
   currentPage = $derived(this.modeContexts[this.currentMode].currentPage);
+
+  /** 0始まりのスライドインデックス（双方向バインド用） */
+  get currentPageIndex(): number {
+    return this.modeContexts[this.currentMode].currentPage - 1;
+  }
+
+  set currentPageIndex(index: number) {
+    const page = index + 1;
+    if (page < 1 || page > this.totalPages) return;
+    if (this.modeContexts[this.currentMode].currentPage === page) return;
+    this.modeContexts[this.currentMode].currentPage = page;
+  }
 
   /** ツールバー表示用のズームパーセンテージ文字列 */
   zoomPercentage = $derived(`${Math.round(this.currentZoom * 100)}%`);
@@ -64,6 +137,7 @@ export class ViewerState {
     currentPage: this.currentPage,
     scrollTop: this.modeContexts[this.currentMode].scrollTop,
     currentZoom: this.currentZoom,
+    data: this.slideData,
   });
 
   /**
@@ -77,7 +151,7 @@ export class ViewerState {
   }
 
   /**
-   * 現在のページ番号を相対的に移動させます。
+   * 現在의 ページ番号を相対的に移動させます。
    * @param delta - 移動するページ数（正負値）
    */
   changePageRelative(delta: number): void {
@@ -114,34 +188,6 @@ export class ViewerState {
       page: this.modeContexts[mode].currentPage,
       source: "program",
     };
-  }
-
-  /**
-   * 表示コンテナの現在の寸法およびズームモードから適切なスケール倍率を再計算します。
-   * @param containerWidth - ビューアコンテナのクライアント幅(px)
-   * @param containerHeight - ビューアコンテナのクライアント高(px)
-   * @param baseWidth - スライドの論理基準幅(px)
-   * @param baseHeight - スライドの論理基準高(px)
-   */
-  updateLayout(
-    containerWidth: number,
-    containerHeight: number,
-    baseWidth: number,
-    baseHeight: number,
-  ): void {
-    switch (this.zoomMode) {
-      case "ORIGINAL":
-        this.currentZoom = 1.0;
-        break;
-      case "FIT_WIDTH":
-        this.currentZoom = containerWidth / baseWidth;
-        break;
-      case "FIT_HEIGHT":
-        this.currentZoom = containerHeight / baseHeight;
-        break;
-      case "CUSTOM":
-        break;
-    }
   }
 }
 

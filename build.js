@@ -16,7 +16,7 @@ console.log(
 
 // 1. プレゼンター側スクリプトの単独コンパイル
 const presenterBuildResult = await Bun.build({
-  entrypoints: ["./src/scripts/presenter.ts"],
+  entrypoints: ["./src/entrypoint/stage_view.ts"],
   outdir: "./dist",
   minify: true,
   target: "browser",
@@ -31,7 +31,7 @@ if (!presenterBuildResult.success) {
 
 // 2. ビューアー側（メイン）スクリプトのコンパイル
 const mainBuildResult = await Bun.build({
-  entrypoints: ["./src/scripts/main.ts"],
+  entrypoints: ["./src/app.ts"],
   outdir: "./dist",
   minify: true,
   target: "browser",
@@ -62,12 +62,10 @@ if (!pptxExportBuildResult.success) {
 try {
   /** @type {Record<string, string>} 埋め込みアセットのキーとローカルパスのマッピング定義 */
   const assetMapping = {
-    "src/presenter.html": "./src/presenter.html",
+    "src/entrypoint/stage_view.html": "./src/entrypoint/stage_view.html",
     "src/pptx_export.html": "./src/pptx_export.html",
-    "dist/presenter.js": "./dist/presenter.js",
+    "dist/stage_view.js": "./dist/stage_view.js",
     "dist/pptxExport.js": "./dist/pptxExport.js",
-    "src/css/presenter.css": "./src/css/presenter.css",
-    "src/css/slide_root.css": "./src/css/slide_root.css",
   };
 
   // テーマディレクトリ内の全CSSファイルを自動検知してマッピングに追加
@@ -91,7 +89,7 @@ try {
     .then((exists) => (exists ? mainCssFile.text() : ""));
 
   const coreFilesPromises = [
-    Bun.file("./dist/main.js").text(),
+    Bun.file("./dist/app.js").text(),
     compiledCssPromise,
     Bun.file("./index.html").text(),
   ];
@@ -120,7 +118,7 @@ try {
   function inlineAssets(htmlTemplate, cssContent, jsContent) {
     const cssPattern = /<link[^>]*href=["']\/dist\/main\.css["'][^>]*\/?>/i;
     const jsPattern =
-      /<script[^>]*src=["']\/dist\/main\.js["'][^>]*>([\s\S]*?<\/script>)?/i;
+      /<script[^>]*src=["']\/src\/app\.ts["'][^>]*>([\s\S]*?<\/script>)?/i;
 
     let resultHtml = htmlTemplate;
     if (cssPattern.test(resultHtml)) {

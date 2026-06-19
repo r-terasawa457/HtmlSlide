@@ -26,8 +26,8 @@ async function rebuild() {
   const result = await Bun.build({
     // 💡 プレゼンター、エクスポート用スクリプトもコンパイル対象に含める
     entrypoints: [
-      "./src/scripts/main.ts",
-      "./src/scripts/presenter.ts",
+      "./src/app.ts",
+      "./src/entrypoint/stage_view.ts",
       "./src/scripts/pptxExport.ts",
     ],
     outdir: "./dist",

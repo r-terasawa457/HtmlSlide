@@ -17,7 +17,7 @@
     {/if}
   </div>
 
-  <div class="flex shrink-0 items-center gap-2 justify-end min-w-[120px]">
+  <div class="flex shrink-0 items-center gap-2 justify-end min-w-30">
     {#each nav.rightActions as action (action.id)}
       <button
         onclick={action.action}

@@ -1,22 +1,44 @@
-拡張した `onkeydown` プロパティの仕様と、それに伴うライフサイクル（イベントリスナーの管理）のアップデートを反映した新しい `README.md` です。
+ダミースクロール（ハイブリッド同期）方式への刷新、および新しい Props（`mode`, `fit_mode`, `scale`, `scrollTop`, `scrollLeft`）の導入に伴う詳細な仕様を反映した `README.md` のアップデート版です。
 
-マークダウンのテーブル構造をクリーンに整形し、特徴およびエッジケースの記述にキーボードイベントの確実なリレーとクリーンアップに関する詳細を追記しています。そのまま上書きしてご活用ください。
+内部コンテナの階層構造や役割、パフォーマンス最適化の仕組みなど、設計仕様を網羅してクリーンに整形しています。そのまま上書きしてご活用ください。
 
-````markdown
+```markdown
 # SlideCanvas
 
-`SlideCanvas` は、Markdown-it などのパーサーによって生成されたスライドの HTML テキストを、アプリケーション側のスタイル（Tailwind CSS 等）から完全に隔離してレンダリングするための Svelte 5 専用コンポーネントです。
+`SlideCanvas` は、Markdown-it などのパーサーによって生成されたスライドの HTML テキストを、アプリケーション側のスタイルから完全に隔離してレンダリングするための Svelte 5 専用高性能コンポーネントです。
 
-内部で `<iframe>` を利用した独立空間を生成し、かつ `$effect` とネイティブの `innerHTML` を組み合わせることで、Svelte の差分検知オーバーヘッドを排除した最高速の描画パフォーマンスを実現しています。
+内部で `<iframe>` を利用した独立空間を維持しつつ、**「ハイブリッド同期（ダミースクロール）方式」** を採用することで、ブラウザ標準の美しいスクロール挙動、自由なズーム（スケーリング）、および `content-visibility` による描画コスト削減をすべて同時に実現しています。
 
-## 特徴
+---
 
-- 🛡️ **完全なスタイル隔離:** `iframe` による独立文書空間により、メインアプリの Tailwind CSS（Preflight 等）によるデザイン破壊を 100% 防ぎます。
-- 📐 **アスペクト比を維持した自動スケーリング:** スライド本来のレンダリング解像度を自動計測し、親コンテナのサイズに合わせて `transform: scale()` を用いた歪みのないフィッティングを行います。
-- ⚡ **動的なスクロールレンダリング最適化 (`content-visibility`):** `mode="scroll"` 時は `content-visibility: auto` を自動適用。プレースホルダーサイズ（`contain-intrinsic-size`）を計測されたスライド解像度に動的に追従させることで、画面外ページの描画コストをスキップしつつ、スクロールバーのガタつきやレイアウトシフトを極限まで抑えます。
-- 🔄 **ステートベースのスクロール双方向同期:** `mode="scroll"` 時において、外部の Props と `iframe` 内部のスクロール位置（`scrollTop`）の双方向同期に対応。タイマー（`setTimeout`）や一時的な制御フラグに依存せず、純粋なステートの差分検知ガードと `requestAnimationFrame` により、チャタリング（無限ループ）のない滑らかな同期を実現します。
-- ⌨️ **隔離空間からのキーボードイベント・リレー:** スタイル隔離の代償として親ウィンドウへ伝播（バブリング）しなくなる `iframe` 内部のキーボードイベント（`keydown`）を確実に捕捉し、Props 経由で親コンポーネントへ透過的にリレーします。これにより、別ウィンドウ同期やプレゼンテーション制御を損ないません。
-- 🧩 **1ファイル完結型・堅牢なマルチエフェクト設計:** 状態初期化（各種リスナー登録含む）、DOMの再構築、外部同期のライフサイクルを Svelte 5 のルールに則り 3つの `$effect` に最適に分離。エフェクトの不要な再トリガーやイベントリスナーの消失・リークといった特有のバグを排除しています。
+## 特徴とパフォーマンス最適化
+
+- 🛡️ **完全なスタイル隔離:** `iframe` による独立文書空間により、メインアプリの CSS（Tailwind CSS の Preflight 等）によるデザイン破壊を 100% 防ぎます。
+- 📜 **ハイブリッド・ダミースクロール構造:** スクロールバーの管理を親コンテナに移譲。拡大・縮小（`scale`）適用後の総サイズを持つ透明なダミー要素でスクロールバーを出現させつつ、親のスクロール座標を等倍に逆算して `iframe` 内部へ同期します。これにより、拡縮によってスクロールバーの太さが変わる問題を解決しています。
+- ⚡ **`content-visibility` の完全動作:** `iframe` 自体は常に親の表示領域（ビューポート）サイズに固定され、内部のドキュメントが実際に `scrollTo` でシームレスにスクロールするため、画面外ページの描画コストをスキップする `content-visibility: auto` が完全に機能します。
+- 🔄 **1px閾値の決定論的ガード（無限ループ防止）:** 外部 Props（`scrollTop`, `scrollLeft`）経由の同期と、コンテナ/iframe 内のネイティブスクロールイベントの循環発火を防ぐため、1px 以上の実差分がある場合のみ同期を許可するガードを搭載。チャタリングのない滑らかな同期を保証します。
+- 🎯 **`currentPageIndex` の双方向同期とスマートスナップ:** `mode: 'scroll'`（スクロール表示）において、スクロール位置に応じた最新のページインデックスが `currentPageIndex` へ自動同期されます。また、外部から `currentPageIndex` が変更された際（または `mode` 切り替え時）は、該当スライドの先頭へ自動スナップスクロールします。ユーザーのスクロール中はスナップを一時抑制するガードを搭載し、滑らかな自由スクロールを維持します。
+- ⌨️ **隔離空間からのキーボードイベント・リレー:** スタイル隔離によって親ウィンドウへ伝播しなくなる `iframe` 内部のキーボードイベント（`keydown`）を捕捉し、Props 経由で親コンポーネントへ透過的にリレーします。
+
+---
+
+## HTML コンテナの階層構造と役割
+
+コンポーネント内部は、パフォーマンス最適化とスケーリングを両立するために以下の 3 層構造で構成されています。
+```
+
+[1. .canvas-wrapper (親コンテナ)] -> overflow: auto で標準スクロールバーを提供
+├── [2. .scroll-filler (ダミー要素)] -> 拡大後の総サイズを物理的に確保しバーを伸ばす
+└── [3. iframe (レンダラー)] -> 表示領域（ビューポート）に固定、内部を実際にスクロール
+
+````
+
+1. **`.canvas-wrapper`（親コンテナ）**
+   - **役割:** ユーザーが操作する実際のスクロールバーの提供、および可視表示領域（ビューポート）の限定。
+2. **`.scroll-filler`（ダミー要素）**
+   - **役割:** `scale` 適用後のスライド全体の物理サイズ（`width` × `scale`, `height` × `scale`）を親コンテナ内に確保し、正しい可動範囲のスクロールバーを出現させる。マウスイベントは透過（`pointer-events: none`）します。
+3. **`iframe`（レンダラー）**
+   - **役割:** スタイルの完全隔離、および `transform: scale()` による表示上の拡縮。物理サイズは `(ビューポート / scale)` に自動調整され、`scale` 変化時も親コンテナとぴったり重なり、内部でネイティブスクロールを発生させます。
 
 ---
 
@@ -29,80 +51,84 @@ export interface ParsedSlideData {
   // <div class="slides"> 自体に付与するクラスやデータ属性のマップ
   containerAttrs: Record<string, string>;
 
-  // スライド直下に配置される、全ページ共通のスタイルタグ等
+  // スライド直下に配置される、全ページ共通のスタイルタグ等の配列
   commons: string[];
 
   // 各 <section class="page">...</section> の outerHTML 文字列の配列
   pages: string[];
 }
-```
+
 ````
 
 ---
 
 ## 使い方
 
-### 1. 基本的な実装例（1ページフィット表示 ＆ キーボードナビゲーション）
+### 1. 1ページフィット表示（全画面プレゼンテーション等）
 
 ```svelte
 <script lang="ts">
   import SlideCanvas from './components/Slide/SlideCanvas.svelte';
-  import type { ParsedSlideData } from './types/slide';
+  import type { ParsedSlideData } from './types';
 
   const slideData: ParsedSlideData = {
     containerAttrs: { class: 'slides-container' },
-    commons: ['<style>@scope { section.page { width: 1920px; height: 1080px; background: #fff; } }</style>'],
+    commons: ['<style>section.page { width: 1920px; height: 1080px; background: #fff; }</style>'],
     pages: [
-      '<section class="page" id="slide-1"><h1>表紙</h1></section>',
-      '<section class="page" id="slide-2"><h1>2ページ目</h1></section>'
+      '<section class="page"><h1>表紙</h1></section>',
+      '<section class="page"><h1>2ページ目</h1></section>'
     ]
   };
 
   let currentPage = $state(0);
-
-  function handleKeyDown(e: KeyboardEvent) {
-    if (e.key === 'ArrowRight') currentPage++;
-    if (e.key === 'ArrowLeft' && currentPage > 0) currentPage--;
-  }
 </script>
 
-<div class="editor-preview-area">
+<div class="presentation-area">
   <SlideCanvas
     data={slideData}
-    mode="fit"
+    mode="slide"
+    fit_mode="contain"
     currentPageIndex={currentPage}
-    width="100%"
-    height="100%"
-    onkeydown={handleKeyDown}
+    width="100vw"
+    height="100vh"
   />
 </div>
+
 ```
 
-### 2. 縦並びスクロール表示 & スクロール位置の双方向同期
-
-タイムラインや別パネルとスクロール位置を同期させたい場合の指定方法です。
+### 2. スクロール表示 ＆ 自由なズーム・スクロール同期（PDFビュアー風）
 
 ```svelte
 <script lang="ts">
   import SlideCanvas from './components/Slide/SlideCanvas.svelte';
-  import type { ParsedSlideData } from './types/slide';
+  import type { ParsedSlideData } from './types';
 
   let { slideData } = $props<{ slideData: ParsedSlideData }>();
 
-  let currentScrollTop = $state(0);
+  let currentScale = $state(1.0);
+  let scrollTop = $state(0);
+  let scrollLeft = $state(0);
 </script>
 
-<div class="sync-container">
-  <div class="status">Current Scroll: {currentScrollTop}px</div>
+<div class="toolbar">
+  <button onclick={() => currentScale += 0.1}>ズームイン</button>
+  <button onclick={() => currentScale -= 0.1}>ズームアウト</button>
+  <span>位置: {scrollTop}px, {scrollLeft}px</span>
+</div>
 
+<div class="viewer-container">
   <SlideCanvas
     data={slideData}
     mode="scroll"
+    fit_mode="none"
+    bind:scale={currentScale}
+    bind:scrollTop={scrollTop}
+    bind:scrollLeft={scrollLeft}
     width="100%"
-    height="100%"
-    bind:scrollTop={currentScrollTop}
+    height="calc(100% - 40px)"
   />
 </div>
+
 ```
 
 ---
@@ -111,30 +137,30 @@ export interface ParsedSlideData {
 
 ### Props
 
-| プロパティ名       | 型                           | デフォルト値 | 説明                                                                                                                       |
-| :----------------- | :--------------------------- | :----------- | :------------------------------------------------------------------------------------------------------------------------- |
-| `data`             | `ParsedSlideData`            | **必須**     | パース済みの構造化スライドデータオブジェクト。                                                                             |
-| `mode`             | `'fit' \| 'scroll'`          | `'fit'`      | `'fit'`: 特定ページのみをコンテナに収まるよう表示。<br>`'scroll'`: 全ページを縦に並べて表示（`content-visibility` 有効）。 |
-| `currentPageIndex` | `number`                     | `0`          | `mode="fit"` の時に表示するスライドのインデックス（0始まり）。                                                             |
-| `width`            | `string`                     | `'100%'`     | コンポーネント外枠の幅。CSSで有効な単位（`%`, `px` 等）が指定可能。                                                        |
-| `height`           | `string`                     | `'100%'`     | コンポーネント外枠の高さ。`'fit-content'` を指定するとスライドの縮小後の高さに自動追従。                                   |
-| `scrollTop`        | `number`                     | `0`          | `mode="scroll"` 時のスクロール位置（px）。`bind:scrollTop` による双方向バインドが可能。                                    |
-| `onscroll`         | `(value: number) => void`    | `undefined`  | `mode="scroll"` 時、スクロール位置が変更された際に呼び出されるコールバック関数。                                           |
-| `onkeydown`        | `(e: KeyboardEvent) => void` | `undefined`  | `iframe` 内部でキーボードイベント（`keydown`）が発生した際に呼び出されるコールバック関数。                                 |
+| プロパティ名       | 型                                    | デフォルト値 | 説明                                                                                                                                                                                                                        |
+| ------------------ | ------------------------------------- | ------------ | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `data`             | `ParsedSlideData`                     | **必須**     | パース済みの構造化スライドデータオブジェクト。                                                                                                                                                                              |
+| `mode`             | `'scroll' \| 'slide'`                 | `'slide'`    | 表示モード。`'scroll'`: 全ページを縦に並べてスクロール表示。`'slide'`: `currentPageIndex` の指定ページのみを表示。                                                                                                          |
+| `fit_mode`         | `'contain' \| 'width' \| 'none'`      | `'contain'`  | スケールの自動計算ルール。`'contain'`: 枠内に1ページが完全に収まるよう自動縮小。`'width'`: 横幅をコンテナの幅にぴったり合わせる。`'none'`: 自動計算を無効化し、`scale` Props の値を直接使用。                               |
+| `currentPageIndex` | `number`                              | `0`          | **双方向バインド (`bind:currentPageIndex`)**。表示中のスライドインデックス。`mode: 'scroll'` では、現在のスクロール位置に応じたインデックスが自動同期され、外部からのインデックス変更時は該当ページへ自動スクロールします。 |
+| `scale`            | `number`                              | `1.0`        | **双方向バインド (`bind:scale`)**。スライドのスケール倍率。`fit_mode` が `none` 以外の時は、自動計算された最新の倍率がこの変数に同期されます。                                                                              |
+| `width`            | `string`                              | `'100%'`     | コンポーネント外枠の幅。`'fit-content'` 指定時はスライドの縮小後の物理幅に自動追従。                                                                                                                                        |
+| `height`           | `string`                              | `'100%'`     | コンポーネント外枠の高さ。`'fit-content'` 指定時はスライドの縮小後の物理高さに自動追従。                                                                                                                                    |
+| `scrollTop`        | `number`                              | `0`          | **双方向バインド (`bind:scrollTop`)**。親コンテナの `scrollTop`（スケール変形適用後の実際の物理ピクセル値）。                                                                                                               |
+| `scrollLeft`       | `number`                              | `0`          | **双方向バインド (`bind:scrollLeft`)**。親コンテナの `scrollLeft`（スケール変形適用後の実際の物理ピクセル値）。                                                                                                             |
+| `onscroll`         | `(top: number, left: number) => void` | `undefined`  | スクロール位置（親コンテナ基準）が変更された際に呼び出されるコールバック関数。                                                                                                                                              |
+| `onkeydown`        | `(e: KeyboardEvent) => void`          | `undefined`  | `iframe` 内部でキーボードイベント（`keydown`）が発生した際に呼び出されるリレー用コールバック関数。                                                                                                                          |
 
 ---
 
-## 開発とテスト
+## 開発とテスト（考慮されているエッジケース）
 
-本コンポーネントは **Vitest** による厳密なテスト駆動のもと設計されています。Svelte 5 のルーン規則や、`iframe` 特有のライフサイクルを安全にハンドリングするための仕組みが盛り込まれています。
+本コンポーネントは **Vitest** による厳密なテスト駆動のもと設計・構築されています。
 
-### 考慮されているエッジケース（テスト済）
-
-- **双方向同期の無限ループ防止（決定論的ガード）**: 外部 Props（`scrollTop`）経由の同期と、`iframe` 内部のネイティブスクロールイベントの循環発火を防ぐため、タイマーやフラグ（`isInternalUpdating` 等）を使用せず、**純粋な値の閾値差分チェック**のみで完全にシャットアウトします。これにより非同期処理のタイミングに左右されない極めて安定した同期を実現します。
-- **高頻度イベントの間引き**: `iframe` 内のスクロールイベントは `passive: true` でリスナーを登録し、`requestAnimationFrame` (rAF) を用いてブラウザの描画フレームと同期させて親へ通知するため、スクロールパフォーマンスを低下させません。
-- **マルチエフェクトによるバグ・リークの排除**: 状態の更新が別セクションに悪影響を及ぼさないよう、役割ごとに `$effect` を細かく分離。計測完了フラグ（`hasMeasured`）の書き換えによってスクロールやキーダウンのイベントリスナーが予期せず解除・消失してしまうエッジケースを解決し、クリーンアップ関数による確実なリスナー解除でメモリリークを防ぎます。
-- **コンテナサイズ 0 のハンドリング**: 非表示のタブやアコーディオン内に配置され、一時的に `clientWidth/Height` が 0 になった際も、ゼロ除算による `NaN` や `Infinity` の発生を防ぎ、安全なスケール倍率（`1`）にフォールバックします。
-- **アクセシビリティ (a11y)**: Svelte コンパイラの支援技術警告をクリアするため、`iframe` に適切な `title` 属性（`title="Slide Render Space"`）を付与しています。
+- **高頻度イベントの間引き:** 親コンテナのスクロール、および iframe 内部の逆同期スクロールは、それぞれ `requestAnimationFrame` (rAF) を用いてブラウザの描画フレームと完全同期（間引き）され、CPUへの過負荷を防ぎます。
+- **ゼロ除算および非表示状態（サイズ0）のハンドリング:** 非表示のタブやアコーディオン内に配置され、一時的にコンテナの `clientWidth/Height` が `0` になった際、また `scale` が `0` に指定された際も、ゼロ除算による `NaN` や `Infinity` の発生を防ぎ、安全なフォールバック（`scale(1)`）を行います。
+- **境界外インデックスの安全保護:** 配列長以上の `currentPageIndex` や、不完全な（`pages` が空の）オブジェクトが渡された場合も、例外をスローせず安全にフォールバック処理を行います。
+- **メモリリークの排除:** 各種エフェクト（`$effect`）の役割を独立させ、クリーンアップ関数によってコンポーネント破棄時にすべてのイベントリスナー（`scroll`, `keydown`）が確実に解除されるよう設計されています。
 
 ```
 

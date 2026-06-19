@@ -53,7 +53,7 @@
   }
 
   async function handleOpenStageView() {
-    const stageUrl = await AssetProvider.resolveCompositeHtmlUrl("src/presenter.html");
+    const stageUrl = await AssetProvider.resolveCompositeHtmlUrl("src/entrypoint/stage_view.html");
     const width = 1280;
     const height = 720;
 

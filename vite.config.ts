@@ -31,10 +31,8 @@ export default defineConfig(({ command }) => {
   if (command === "build") {
     const assetMapping: Record<string, string> = {
       // 💡 サーバー上の絶対パス（スラッシュ始まり）をキーにします
-      "/src/presenter.html": "./src/presenter.html",
+      "/src/entrypoint/stage_view.html": "./src/entrypoint/stage_view.html",
       "/src/pptx_export.html": "./src/pptx_export.html",
-      "/src/css/presenter.css": "./src/css/presenter.css",
-      "/src/css/slide_root.css": "./src/css/slide_root.css",
     };
 
     for (const file of themeFiles) {
@@ -81,11 +79,13 @@ export default defineConfig(({ command }) => {
       assetsInlineLimit: 100000000,
       chunkSizeWarningLimit: 100000000,
       rollupOptions: {
-        input: {
-          main: resolve(__dirname, "index.html"),
-          presenter: resolve(__dirname, "src/presenter.html"),
-          pptxExport: resolve(__dirname, "src/pptx_export.html"),
-        },
+        input: (command === "build"
+          ? { main: resolve(__dirname, "index.html") }
+          : {
+              main: resolve(__dirname, "index.html"),
+              presenter: resolve(__dirname, "src/entrypoint/stage_view.html"),
+              pptxExport: resolve(__dirname, "src/pptx_export.html"),
+            }) as Record<string, string>,
         output: {
           entryFileNames: "assets/[name].js",
           chunkFileNames: "assets/[name].js",

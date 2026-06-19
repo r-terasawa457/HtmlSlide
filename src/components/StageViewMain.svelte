@@ -6,15 +6,22 @@
    */
   import { onMount, onDestroy } from "svelte";
   import { initAppState } from "../states/AppState.svelte";
-  import ViewerCore from "./Viewer/ViewerCore.svelte";
+  import SlideCanvas from "./Slide/SlideCanvas.svelte";
+  import type { ParsedSlideData } from "./Slide/types";
 
   const appState = initAppState();
 
+  console.log("loaded")
+
   let renderMode = $state<"SCROLL" | "SLIDE">("SLIDE");
-  let currentPage = $state(1);
+  let currentPageIndex = $state(0);
   let currentZoom = $state(1.0);
   let scrollTop = $state(0);
-  let totalPages = $state(1);
+  let slideData = $state<ParsedSlideData>({
+    containerAttrs: {},
+    commons: [],
+    pages: []
+  });
 
   /**
    * 親ウィンドウからの同期メッセージを受信し、ローカル状態およびAppStateの状態を更新します。
@@ -24,12 +31,12 @@
     if (!e.data || e.data.type !== "sync_stage") return;
 
     renderMode = e.data.renderMode;
-    currentPage = e.data.currentPage;
+    currentPageIndex = e.data.currentPage - 1;
     currentZoom = e.data.currentZoom;
     scrollTop = e.data.scrollTop;
 
-    if (e.data.slidesHtml !== undefined) {
-      appState.slidesHtml = e.data.slidesHtml;
+    if (e.data.data !== undefined) {
+      slideData = e.data.data;
     }
     if (e.data.title !== undefined) {
       appState.title = e.data.title;
@@ -50,13 +57,13 @@
 </script>
 
 <div id="stage-view-root">
-  <ViewerCore 
-    {renderMode} 
-    interactive={false} 
-    bind:currentPage 
-    bind:currentZoom 
-    bind:totalPages
-    bind:scrollTop 
+  <SlideCanvas
+    data={slideData}
+    mode={renderMode === "SCROLL" ? "scroll" : "slide"}
+    fit_mode="none"
+    bind:currentPageIndex
+    bind:scale={currentZoom}
+    bind:scrollTop
   />
 </div>
 

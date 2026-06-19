@@ -7,7 +7,7 @@
   import { getAppState } from "../states/AppState.svelte";
   import { getViewerState } from "../states/ViewerState.svelte";
   import ControlBar from "./Viewer/ControlBar.svelte";
-  import ViewerCore from "./Viewer/ViewerCore.svelte";
+  import SlideCanvas from "./Slide/SlideCanvas.svelte";
   import PresenterConsole from "./Panes/PresenterConsole.svelte";
 
   const appState = getAppState();
@@ -15,10 +15,47 @@
   
   let isStageReady = $state(false);
 
+  let fitMode = $derived.by<"contain" | "width" | "none">(() => {
+    switch (viewerState.zoomMode) {
+      case "FIT_WIDTH":
+        return "width";
+      case "FIT_HEIGHT":
+        return "contain";
+      default:
+        return "none";
+    }
+  });
+
   function handleMessage(e: MessageEvent): void {
     console.log("Received message in ViewerMain:", e.data);
     if (e.data && e.data.type === "stage_ready") {
       isStageReady = true;
+    }
+  }
+
+  function handleKeyDown(e: KeyboardEvent): void {
+    if ((e.ctrlKey || e.metaKey) && e.key === "p") {
+      e.preventDefault();
+      appState.requestPrint();
+      return;
+    }
+
+    if (viewerState.currentMode === "STANDALONE_PRES") {
+      switch (e.key) {
+        case "ArrowRight":
+        case " ":
+        case "PageDown":
+        case "Enter":
+          e.preventDefault();
+          viewerState.changePageRelative(1);
+          break;
+        case "ArrowLeft":
+        case "Backspace":
+        case "PageUp":
+          e.preventDefault();
+          viewerState.changePageRelative(-1);
+          break;
+      }
     }
   }
 
@@ -34,7 +71,6 @@
     if (stage && !stage.closed && isStageReady) {
       const syncPayload = {
         ...viewerState.stageSyncData,
-        slidesHtml: appState.slidesHtml,
         title: appState.title
       };
       stage.postMessage(syncPayload, "*");
@@ -43,10 +79,12 @@
 
   onMount(() => {
     window.addEventListener("message", handleMessage);
+    window.addEventListener("keydown", handleKeyDown);
   });
 
   onDestroy(() => {
     window.removeEventListener("message", handleMessage);
+    window.removeEventListener("keydown", handleKeyDown);
   });
 </script>
 
@@ -58,24 +96,24 @@
       <ControlBar />
       <div id="core-viewport">
         {#if viewerState.currentMode === "SCROLL"}
-          <ViewerCore 
-            renderMode="SCROLL" 
-            interactive={true} 
-            bind:currentPage={viewerState.currentPage} 
-            bind:currentZoom={viewerState.currentZoom}
-            bind:totalPages={viewerState.totalPages}
+          <SlideCanvas
+            data={viewerState.slideData}
+            mode="scroll"
+            fit_mode={fitMode}
+            bind:currentPageIndex={viewerState.currentPageIndex}
+            bind:scale={viewerState.currentZoom}
             bind:scrollTop={viewerState.modeContexts.SCROLL.scrollTop}
-            bind:navigationSignal={viewerState.navigationSignal}
+            onkeydown={handleKeyDown}
           />
         {:else if viewerState.currentMode === "STANDALONE_PRES"}
-          <ViewerCore 
-            renderMode="SLIDE" 
-            interactive={true} 
-            bind:currentPage={viewerState.currentPage} 
-            bind:currentZoom={viewerState.currentZoom}
-            bind:scrollTop={viewerState.modeContexts.SCROLL.scrollTop}
-            bind:totalPages={viewerState.totalPages}
-            bind:navigationSignal={viewerState.navigationSignal} />
+          <SlideCanvas
+            data={viewerState.slideData}
+            mode="slide"
+            fit_mode={fitMode}
+            bind:currentPageIndex={viewerState.currentPageIndex}
+            bind:scale={viewerState.currentZoom}
+            onkeydown={handleKeyDown}
+          />
         {/if}
       </div>
     </div>

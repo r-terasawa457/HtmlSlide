@@ -3,7 +3,7 @@
    * @component App
    * @description アプリケーションのエントリーポイント。
    */
-  import "../app.css"; // Tailwind v4 のエントリーポイントに変更
+  import "../css/app.css"; // Tailwind v4 のエントリーポイントに変更
   import DropZone from "./DropZone.svelte";
   import ViewerMain from "./ViewerMain.svelte";
   import PrintManager from "./Print/PrintManager.svelte";
