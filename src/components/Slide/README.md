@@ -1,22 +1,22 @@
-Bun + Vite + Svelte 5 (Runes) 環境に最適化された、スタイル隔離型スライドレンダリングコンポーネント `SlideCanvas` の `README.md` です。
+拡張した `onkeydown` プロパティの仕様と、それに伴うライフサイクル（イベントリスナーの管理）のアップデートを反映した新しい `README.md` です。
 
-プロジェクトのコンポーネントディレクトリにそのまま配置してご活用ください。
+マークダウンのテーブル構造をクリーンに整形し、特徴およびエッジケースの記述にキーボードイベントの確実なリレーとクリーンアップに関する詳細を追記しています。そのまま上書きしてご活用ください。
 
----
-
+````markdown
 # SlideCanvas
 
 `SlideCanvas` は、Markdown-it などのパーサーによって生成されたスライドの HTML テキストを、アプリケーション側のスタイル（Tailwind CSS 等）から完全に隔離してレンダリングするための Svelte 5 専用コンポーネントです。
 
-内部で `<iframe>` (`srcdoc`) を利用した独立空間を生成し、かつ `$effect` とネイティブの `innerHTML` を組み合わせることで、Svelte の差分検知オーバーヘッドを排除した最高速の描画パフォーマンスを実現しています。
+内部で `<iframe>` を利用した独立空間を生成し、かつ `$effect` とネイティブの `innerHTML` を組み合わせることで、Svelte の差分検知オーバーヘッドを排除した最高速の描画パフォーマンスを実現しています。
 
 ## 特徴
 
 - 🛡️ **完全なスタイル隔離:** `iframe` による独立文書空間により、メインアプリの Tailwind CSS（Preflight 等）によるデザイン破壊を 100% 防ぎます。
 - 📐 **アスペクト比を維持した自動スケーリング:** スライド本来のレンダリング解像度を自動計測し、親コンテナのサイズに合わせて `transform: scale()` を用いた歪みのないフィッティングを行います。
-- ⚡ **高速なレンダリングベース:** 文字列ベースの構造化データを `$effect` 内で一括注入するため、大量のスライドでもメモリ消費と描画負荷を最小限に抑えます。
-- 縦スクロール表示（全ページ表示）とフィット表示（特定1ページ表示）の双方を同一コンポーネントでサポート。
-- `height="fit-content"` 指定時には、縮小後の実際の表示高さを計算してラッパーにフィードバックするため、CSS スケール特有の「不自然な余白」が発生しません。
+- ⚡ **動的なスクロールレンダリング最適化 (`content-visibility`):** `mode="scroll"` 時は `content-visibility: auto` を自動適用。プレースホルダーサイズ（`contain-intrinsic-size`）を計測されたスライド解像度に動的に追従させることで、画面外ページの描画コストをスキップしつつ、スクロールバーのガタつきやレイアウトシフトを極限まで抑えます。
+- 🔄 **ステートベースのスクロール双方向同期:** `mode="scroll"` 時において、外部の Props と `iframe` 内部のスクロール位置（`scrollTop`）の双方向同期に対応。タイマー（`setTimeout`）や一時的な制御フラグに依存せず、純粋なステートの差分検知ガードと `requestAnimationFrame` により、チャタリング（無限ループ）のない滑らかな同期を実現します。
+- ⌨️ **隔離空間からのキーボードイベント・リレー:** スタイル隔離の代償として親ウィンドウへ伝播（バブリング）しなくなる `iframe` 内部のキーボードイベント（`keydown`）を確実に捕捉し、Props 経由で親コンポーネントへ透過的にリレーします。これにより、別ウィンドウ同期やプレゼンテーション制御を損ないません。
+- 🧩 **1ファイル完結型・堅牢なマルチエフェクト設計:** 状態初期化（各種リスナー登録含む）、DOMの再構築、外部同期のライフサイクルを Svelte 5 のルールに則り 3つの `$effect` に最適に分離。エフェクトの不要な再トリガーやイベントリスナーの消失・リークといった特有のバグを排除しています。
 
 ---
 
@@ -29,37 +29,41 @@ export interface ParsedSlideData {
   // <div class="slides"> 自体に付与するクラスやデータ属性のマップ
   containerAttrs: Record<string, string>;
 
-  // スライド直下に配置される、全ページ共通のスタイルタグ等（data-original-index付与推奨）
+  // スライド直下に配置される、全ページ共通のスタイルタグ等
   commons: string[];
 
   // 各 <section class="page">...</section> の outerHTML 文字列の配列
-  // 各ページ固有の @scope スタイルタグなどは、この page 文字列の内部に内包させてください
   pages: string[];
 }
 ```
+````
 
 ---
 
 ## 使い方
 
-### 1. 基本的な実装例（1ページフィット表示）
+### 1. 基本的な実装例（1ページフィット表示 ＆ キーボードナビゲーション）
 
 ```svelte
 <script lang="ts">
   import SlideCanvas from './components/Slide/SlideCanvas.svelte';
   import type { ParsedSlideData } from './types/slide';
 
-  // サンプルデータ
   const slideData: ParsedSlideData = {
     containerAttrs: { class: 'slides-container' },
     commons: ['<style>@scope { section.page { width: 1920px; height: 1080px; background: #fff; } }</style>'],
     pages: [
-      '<section class="page" id="slide-1"><h1>表紙</h1><style>@scope { h1 { color: tomato; } }</style></section>',
+      '<section class="page" id="slide-1"><h1>表紙</h1></section>',
       '<section class="page" id="slide-2"><h1>2ページ目</h1></section>'
     ]
   };
 
   let currentPage = $state(0);
+
+  function handleKeyDown(e: KeyboardEvent) {
+    if (e.key === 'ArrowRight') currentPage++;
+    if (e.key === 'ArrowLeft' && currentPage > 0) currentPage--;
+  }
 </script>
 
 <div class="editor-preview-area">
@@ -69,33 +73,36 @@ export interface ParsedSlideData {
     currentPageIndex={currentPage}
     width="100%"
     height="100%"
+    onkeydown={handleKeyDown}
   />
 </div>
-
-<button onclick={() => currentPage++}>次へ</button>
-
-<style>
-  .editor-preview-area {
-    width: 800px;
-    height: 450px;
-    border: 1px solid #ccc;
-  }
-</style>
-
 ```
 
-### 2. 縦並びスクロール表示 & fit-content の利用
+### 2. 縦並びスクロール表示 & スクロール位置の双方向同期
 
-ダッシュボードや一覧画面などで、スライドを横幅いっぱいに広げつつ、高さはコンテンツの縮小サイズにぴったり合わせたい場合の指定方法です。
+タイムラインや別パネルとスクロール位置を同期させたい場合の指定方法です。
 
 ```svelte
-<SlideCanvas
-  data={slideData}
-  mode="scroll"
-  width="100%"
-  height="fit-content"
-/>
+<script lang="ts">
+  import SlideCanvas from './components/Slide/SlideCanvas.svelte';
+  import type { ParsedSlideData } from './types/slide';
 
+  let { slideData } = $props<{ slideData: ParsedSlideData }>();
+
+  let currentScrollTop = $state(0);
+</script>
+
+<div class="sync-container">
+  <div class="status">Current Scroll: {currentScrollTop}px</div>
+
+  <SlideCanvas
+    data={slideData}
+    mode="scroll"
+    width="100%"
+    height="100%"
+    bind:scrollTop={currentScrollTop}
+  />
+</div>
 ```
 
 ---
@@ -104,34 +111,31 @@ export interface ParsedSlideData {
 
 ### Props
 
-| プロパティ名 | 型                | デフォルト値 | 説明                                           |
-| ------------ | ----------------- | ------------ | ---------------------------------------------- | ------------------------------------------------------- |
-| `data`       | `ParsedSlideData` | **必須**     | パース済みの構造化スライドデータオブジェクト。 |
-| `mode`       | `'fit'            | 'scroll'`    | `'fit'`                                        | `'fit'`: 特定ページのみをコンテナに収まるよう表示。<br> |
-
-<br>`'scroll'`: 全ページを縦に並べて表示。 |
-| `currentPageIndex` | `number` | `0` | `mode="fit"` の時に表示するスライドのインデックス（0始まり）。 |
-| `width` | `string` | `'100%'` | コンポーネント外枠の幅。CSSで有効な単位（`%`, `px`, `vw`等）が指定可能。 |
-| `height` | `string` | `'100%'` | コンポーネント外枠の高さ。CSS単位のほか、`'fit-content'` を指定するとスライドの縮小後の高さに自動追従します。 |
+| プロパティ名       | 型                           | デフォルト値 | 説明                                                                                                                       |
+| :----------------- | :--------------------------- | :----------- | :------------------------------------------------------------------------------------------------------------------------- |
+| `data`             | `ParsedSlideData`            | **必須**     | パース済みの構造化スライドデータオブジェクト。                                                                             |
+| `mode`             | `'fit' \| 'scroll'`          | `'fit'`      | `'fit'`: 特定ページのみをコンテナに収まるよう表示。<br>`'scroll'`: 全ページを縦に並べて表示（`content-visibility` 有効）。 |
+| `currentPageIndex` | `number`                     | `0`          | `mode="fit"` の時に表示するスライドのインデックス（0始まり）。                                                             |
+| `width`            | `string`                     | `'100%'`     | コンポーネント外枠の幅。CSSで有効な単位（`%`, `px` 等）が指定可能。                                                        |
+| `height`           | `string`                     | `'100%'`     | コンポーネント外枠の高さ。`'fit-content'` を指定するとスライドの縮小後の高さに自動追従。                                   |
+| `scrollTop`        | `number`                     | `0`          | `mode="scroll"` 時のスクロール位置（px）。`bind:scrollTop` による双方向バインドが可能。                                    |
+| `onscroll`         | `(value: number) => void`    | `undefined`  | `mode="scroll"` 時、スクロール位置が変更された際に呼び出されるコールバック関数。                                           |
+| `onkeydown`        | `(e: KeyboardEvent) => void` | `undefined`  | `iframe` 内部でキーボードイベント（`keydown`）が発生した際に呼び出されるコールバック関数。                                 |
 
 ---
 
 ## 開発とテスト
 
-本コンポーネントは **Vitest** による厳密なテスト駆動のもと設計されています。環境依存（JSDOM で `ResizeObserver` が未定義になる問題など）や Svelte 5 のルーン規則（`rune_outside_svelte`）をクリアするための仕組みが盛り込まれています。
-
-### テストの実行
-
-テストファイルは Svelte 5 コンパイラにルーンを認識させるため、拡張子を `.test.svelte.ts` としています。
-
-```bash
-# vitestの実行 (Bun環境)
-bun vitest
-
-```
+本コンポーネントは **Vitest** による厳密なテスト駆動のもと設計されています。Svelte 5 のルーン規則や、`iframe` 特有のライフサイクルを安全にハンドリングするための仕組みが盛り込まれています。
 
 ### 考慮されているエッジケース（テスト済）
 
-- **コンテナサイズ 0 のハンドリング:** 非表示のタブやアコーディオン内に配置され、一時的に `clientWidth/Height` が 0 になった際も、ゼロ除算による `NaN` や `Infinity` の発生を防ぎ、安全なスケール倍率（`1`）にフォールバックします。
-- **不正なインデックスへの耐性:** 存在しないページ番号（負の数や配列長以上のインデックス）が Props から渡された場合も、クラッシュせず安全に白画面を維持します。
-- **アクセシビリティ (a11y):** Svelteコンパイラの支援技術警告をクリアするため、すべての `iframe` に適切な `title` 属性を動的に付与しています。
+- **双方向同期の無限ループ防止（決定論的ガード）**: 外部 Props（`scrollTop`）経由の同期と、`iframe` 内部のネイティブスクロールイベントの循環発火を防ぐため、タイマーやフラグ（`isInternalUpdating` 等）を使用せず、**純粋な値の閾値差分チェック**のみで完全にシャットアウトします。これにより非同期処理のタイミングに左右されない極めて安定した同期を実現します。
+- **高頻度イベントの間引き**: `iframe` 内のスクロールイベントは `passive: true` でリスナーを登録し、`requestAnimationFrame` (rAF) を用いてブラウザの描画フレームと同期させて親へ通知するため、スクロールパフォーマンスを低下させません。
+- **マルチエフェクトによるバグ・リークの排除**: 状態の更新が別セクションに悪影響を及ぼさないよう、役割ごとに `$effect` を細かく分離。計測完了フラグ（`hasMeasured`）の書き換えによってスクロールやキーダウンのイベントリスナーが予期せず解除・消失してしまうエッジケースを解決し、クリーンアップ関数による確実なリスナー解除でメモリリークを防ぎます。
+- **コンテナサイズ 0 のハンドリング**: 非表示のタブやアコーディオン内に配置され、一時的に `clientWidth/Height` が 0 になった際も、ゼロ除算による `NaN` や `Infinity` の発生を防ぎ、安全なスケール倍率（`1`）にフォールバックします。
+- **アクセシビリティ (a11y)**: Svelte コンパイラの支援技術警告をクリアするため、`iframe` に適切な `title` 属性（`title="Slide Render Space"`）を付与しています。
+
+```
+
+```
