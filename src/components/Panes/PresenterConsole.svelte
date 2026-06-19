@@ -5,7 +5,7 @@
    * 現在のページのスライドを表示するViewerCoreを中央に配置し、前後のページ切り替えボタンや次のスライド情報の表示などの発表進行用UIを提供します。
    */
   import { getViewerState } from "../../states/ViewerState.svelte";
-  import ViewerCore from "../Viewer/ViewerCore.svelte";
+  import SlideCanvas from "../Slide/SlideCanvas.svelte";
 
   const viewerState = getViewerState();
 </script>
@@ -54,7 +54,12 @@
   </div>
 
   <div class="console-preview-area">
-    <ViewerCore renderMode="SLIDE" interactive={true} currentPage={viewerState.currentPage} />
+    <SlideCanvas
+      data={viewerState.slideData}
+      mode="slide"
+      fit_mode="contain"
+      bind:currentPageIndex={viewerState.currentPageIndex}
+    />
   </div>
 </div>
 
