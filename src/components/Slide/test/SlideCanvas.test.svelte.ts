@@ -47,8 +47,10 @@ class ResizeObserverMock {
     observerMap.clear();
   }
 }
+
 globalThis.ResizeObserver =
   globalThis.ResizeObserver || (ResizeObserverMock as any);
+globalThis.scrollTo = globalThis.scrollTo || vi.fn();
 
 let mockPageWidth = 800;
 let mockPageHeight = 600;
@@ -91,8 +93,18 @@ if (iframeDescriptor && iframeDescriptor.get) {
   Object.defineProperty(HTMLIFrameElement.prototype, "contentWindow", {
     get() {
       const win = originalGet.call(this);
-      if (win && win.HTMLElement) {
-        injectLayoutMock(win.HTMLElement.prototype);
+      if (win) {
+        if (win.HTMLElement) {
+          injectLayoutMock(win.HTMLElement.prototype);
+        }
+        // JSDOM環境での "Not implemented: Window's scrollTo()" エラーを防止するために一律スタブ化
+        if (
+          !win.hasOwnProperty("scrollTo") ||
+          typeof win.scrollTo !== "function" ||
+          !vi.isMockFunction(win.scrollTo)
+        ) {
+          win.scrollTo = vi.fn();
+        }
       }
       return win;
     },
@@ -173,15 +185,19 @@ describe("SlideCanvas Component (Vitest)", () => {
 
     await tick();
 
+    const container = target.querySelector(
+      ".slide-canvas-container",
+    ) as HTMLElement;
     const wrapper = target.querySelector(".canvas-wrapper") as HTMLElement;
     const filler = target.querySelector(".scroll-filler") as HTMLElement;
     const iframe = target.querySelector("iframe") as HTMLIFrameElement;
 
+    expect(container).toBeTruthy();
     expect(wrapper).toBeTruthy();
     expect(filler).toBeTruthy();
     expect(iframe).toBeTruthy();
-    expect(wrapper.style.width).toBe("500px");
-    expect(wrapper.style.height).toBe("400px");
+    expect(container.style.width).toBe("500px");
+    expect(container.style.height).toBe("400px");
 
     const doc = iframe.contentDocument;
     expect(doc?.body.innerHTML).toContain("slides-root");
@@ -225,9 +241,6 @@ describe("SlideCanvas Component (Vitest)", () => {
     const wrapper = target.querySelector(".canvas-wrapper") as HTMLElement;
     const iframe = target.querySelector("iframe") as HTMLIFrameElement;
     const win = iframe.contentWindow;
-    if (win) {
-      win.scrollTo = vi.fn();
-    }
 
     props.scrollTop = 100;
     props.scrollLeft = 50;
@@ -254,9 +267,6 @@ describe("SlideCanvas Component (Vitest)", () => {
     const wrapper = target.querySelector(".canvas-wrapper") as HTMLElement;
     const iframe = target.querySelector("iframe") as HTMLIFrameElement;
     const win = iframe.contentWindow;
-    if (win) {
-      win.scrollTo = vi.fn();
-    }
 
     vi.spyOn(window, "requestAnimationFrame").mockImplementation((cb: any) => {
       cb();
@@ -384,7 +394,7 @@ describe("SlideCanvas Component (Vitest)", () => {
 
     expect(iframe.style.transform).not.toContain("NaN");
     expect(iframe.style.transform).not.toContain("Infinity");
-    expect(iframe.style.transform).toBe("scale(1)");
+    expect(iframe.style.transform).toBe("translate(0px, 0px) scale(1)");
   });
 
   test("E-3: onkeydown コールバック未指定時、内部キーイベントが発生しても例外をスローしないこと", async () => {
@@ -421,7 +431,6 @@ describe("SlideCanvas Component (Vitest)", () => {
     triggerResize(wrapper, 800, 600);
     await tick();
 
-    // scrollTop を変更 (2枚目のスライド位置: slideHeight=600px * scale=1.0)
     props.scrollTop = 600;
     await tick();
 
@@ -444,7 +453,6 @@ describe("SlideCanvas Component (Vitest)", () => {
     triggerResize(wrapper, 800, 600);
     await tick();
 
-    // currentPageIndex を 1 に変更
     props.currentPageIndex = 1;
     await tick();
 

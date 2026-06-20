@@ -18,6 +18,7 @@
     height = '100%',
     scrollTop = $bindable(0),
     scrollLeft = $bindable(0),
+    onresize,
     onscroll,
     onkeydown
   } = $props<{
@@ -30,24 +31,30 @@
     height?: string;
     scrollTop?: number;
     scrollLeft?: number;
+    onresize?: (width: number, height: number) => void;
     onscroll?: (top: number, left: number) => void;
     onkeydown?: (e: KeyboardEvent) => void;
   }>();
 
   let wrapperRef = $state<HTMLDivElement | null>(null);
   let iframeRef = $state<HTMLIFrameElement | null>(null);
-
   let containerWidth = $state(0);
   let containerHeight = $state(0);
   let slideWidth = $state(1920);
   let slideHeight = $state(1080);
   let hasMeasured = $state(false);
-
   let lastPageIndex = $state<number | undefined>(undefined);
   let prevMode = $state<'slide' | 'scroll' | undefined>(undefined);
 
   let tickingWrapper = false;
   let tickingIframe = false;
+
+  /**
+   * 内部のスクロールイベントによって適用された最新の位置状態。
+   * `$effect` による二重同期（フィードバックループ）を防止するために使用します。
+   */
+  let lastInternalTop = 0;
+  let lastInternalLeft = 0;
 
   let totalInternalWidth = $derived(slideWidth);
   let totalInternalHeight = $derived(
@@ -71,6 +78,7 @@
       ? (containerWidth - totalInternalWidth * scale) / 2
       : 0
   );
+
   let offsetY = $derived(
     containerHeight > totalInternalHeight * scale
       ? (containerHeight - totalInternalHeight * scale) / 2
@@ -87,8 +95,16 @@
   });
 
   /**
+   * 計算されたコンテンツの実描画サイズをコールバック経由で親コンポーネントへ通知します。
+   */
+  $effect(() => {
+    if (onresize) {
+      onresize(totalInternalWidth * scale, totalInternalHeight * scale);
+    }
+  });
+
+  /**
    * スクロール位置（scrollTop）から currentPageIndex への同期。
-   * ユーザー操作や外部からのスクロールにより表示ページが変わった際に、currentPageIndex を更新します。
    */
   $effect(() => {
     if (mode === 'scroll' && slideHeight > 0) {
@@ -126,8 +142,7 @@
   });
 
   /**
-   * mode === 'slide' の際、currentPageIndex の変更を lastPageIndex に同期し、
-   * mode === 'scroll' に切り替わった際のスクロール不整合を防ぎます。
+   * mode === 'slide' の際、currentPageIndex の変更を lastPageIndex に同期。
    */
   $effect(() => {
     if (mode === 'slide') {
@@ -137,28 +152,29 @@
 
   /**
    * 親コンテナのスクロールイベントハンドラー。
-   * スクロール位置を等倍基準に逆算して iframe 内部へ動的に同期します。
    */
   function handleWrapperScroll() {
+    if (!wrapperRef) return;
+    
+    const targetTop = wrapperRef.scrollTop;
+    const targetLeft = wrapperRef.scrollLeft;
+
+    // 1. 【即時実行】iframeへのDOM同期は遅延なくその場で行う（滑らかさを担保）
+    const win = iframeRef?.contentWindow;
+    if (win && scale > 0 && typeof win.scrollTo === 'function') {
+      win.scrollTo({
+        top: targetTop / scale,
+        left: targetLeft / scale
+      });
+    }
+
+    // 2. 【間引き】重いSvelteの状態更新と外部通知はrAFに逃がす（キビキビ感を担保）
     if (!tickingWrapper) {
       window.requestAnimationFrame(() => {
-        if (!wrapperRef) {
-          tickingWrapper = false;
-          return;
-        }
-        const targetTop = wrapperRef.scrollTop;
-        const targetLeft = wrapperRef.scrollLeft;
-
         scrollTop = targetTop;
         scrollLeft = targetLeft;
-
-        const win = iframeRef?.contentWindow;
-        if (win && scale > 0 && typeof win.scrollTo === 'function') {
-          win.scrollTo({
-            top: targetTop / scale,
-            left: targetLeft / scale
-          });
-        }
+        lastInternalTop = targetTop;
+        lastInternalLeft = targetLeft;
 
         if (onscroll) onscroll(targetTop, targetLeft);
         tickingWrapper = false;
@@ -169,41 +185,44 @@
 
   /**
    * iframe内部のスクロールイベントハンドラー。
-   * 内部フォーカス移動等による自発的スクロールを検知し、決定論的ガードを経て親側へ逆同期します。
    */
   function handleIframeScroll() {
-    if (!tickingIframe) {
-      window.requestAnimationFrame(() => {
-        const win = iframeRef?.contentWindow;
-        const doc = iframeRef?.contentDocument;
-        if (!win || !doc) {
-          tickingIframe = false;
-          return;
+    const win = iframeRef?.contentWindow;
+    const doc = iframeRef?.contentDocument;
+    if (!win || !doc) return;
+
+    const currentIframeTop = doc.documentElement.scrollTop || doc.body.scrollTop;
+    const currentIframeLeft = doc.documentElement.scrollLeft || doc.body.scrollLeft;
+
+    const expectedParentTop = currentIframeTop * scale;
+    const expectedParentLeft = currentIframeLeft * scale;
+
+    const tolerance = Math.max(1.5, scale);
+
+    if (Math.abs(scrollTop - expectedParentTop) > tolerance || Math.abs(scrollLeft - expectedParentLeft) > tolerance) {
+      // 1. 【即時実行】親コンテナへのDOM同期は遅延なくその場で行う（滑らかさを担保）
+      if (wrapperRef) {
+        if (typeof wrapperRef.scrollTo === 'function') {
+          wrapperRef.scrollTo({ top: expectedParentTop, left: expectedParentLeft });
+        } else {
+          wrapperRef.scrollTop = expectedParentTop;
+          wrapperRef.scrollLeft = expectedParentLeft;
         }
+      }
 
-        const currentIframeTop = doc.documentElement.scrollTop || doc.body.scrollTop;
-        const currentIframeLeft = doc.documentElement.scrollLeft || doc.body.scrollLeft;
-
-        const expectedParentTop = currentIframeTop * scale;
-        const expectedParentLeft = currentIframeLeft * scale;
-
-        if (Math.abs(scrollTop - expectedParentTop) > 1 || Math.abs(scrollLeft - expectedParentLeft) > 1) {
+      // 2. 【間引き】重いSvelteの状態更新と外部通知はrAFに逃がす（キビキビ感を担保）
+      if (!tickingIframe) {
+        window.requestAnimationFrame(() => {
           scrollTop = expectedParentTop;
           scrollLeft = expectedParentLeft;
-          
-          if (wrapperRef) {
-            if (typeof wrapperRef.scrollTo === 'function') {
-              wrapperRef.scrollTo({ top: expectedParentTop, left: expectedParentLeft });
-            } else {
-              wrapperRef.scrollTop = expectedParentTop;
-              wrapperRef.scrollLeft = expectedParentLeft;
-            }
-          }
+          lastInternalTop = expectedParentTop;
+          lastInternalLeft = expectedParentLeft;
+
           if (onscroll) onscroll(expectedParentTop, expectedParentLeft);
-        }
-        tickingIframe = false;
-      });
-      tickingIframe = true;
+          tickingIframe = false;
+        });
+        tickingIframe = true;
+      }
     }
   }
 
@@ -234,7 +253,6 @@
 
   /**
    * データや表示モードの変更を検知し、iframe内のHTML構造を再構築およびサイズ計測するライフサイクル。
-   * ハイブリッド同期を成立させるため、iframe内部のbodyにもコンテンツの等倍総サイズを明示的に付与します。
    */
   $effect(() => {
     if (!iframeRef) return;
@@ -267,7 +285,6 @@
     const attrs = Object.entries(data.containerAttrs)
       .map(([k, v]) => `${k}="${v}"`)
       .join(' ');
-
     const containerStyle = `width: ${totalInternalWidth}px; height: ${totalInternalHeight}px; position: relative; overflow: hidden;`;
 
     doc.body.innerHTML = `<div ${attrs} style="${containerStyle}">${commonsHtml}\n${contentHtml}</div>`;
@@ -288,11 +305,21 @@
   });
 
   /**
-   * 外部から直接更新された位置状態（scrollTop / scrollLeft）を、親コンテナおよび iframe 内部へ強制同期するライフサイクル。
+   * 外部から直接更新された位置状態を、親コンテナおよび iframe 内部へ強制同期。
    */
   $effect(() => {
     if (!wrapperRef) return;
-    if (Math.abs(wrapperRef.scrollTop - scrollTop) > 1 || Math.abs(wrapperRef.scrollLeft - scrollLeft) > 1) {
+
+    // 内部スクロールイベントによる変更通知（自身のトリガー）である場合は追従処理をバイパス
+    const isInternalUpdate = 
+      Math.abs(scrollTop - lastInternalTop) < 0.1 && 
+      Math.abs(scrollLeft - lastInternalLeft) < 0.1;
+      
+    if (isInternalUpdate) return;
+
+    const tolerance = Math.max(1.5, scale);
+
+    if (Math.abs(wrapperRef.scrollTop - scrollTop) > tolerance || Math.abs(wrapperRef.scrollLeft - scrollLeft) > tolerance) {
       if (typeof wrapperRef.scrollTo === 'function') {
         wrapperRef.scrollTo({ top: scrollTop, left: scrollLeft });
       } else {
@@ -308,7 +335,7 @@
       const doc = win.document;
       const currentTop = doc.documentElement.scrollTop || doc.body.scrollTop;
       const currentLeft = doc.documentElement.scrollLeft || doc.body.scrollLeft;
-      if (Math.abs(currentTop - targetTop) > 1 || Math.abs(currentLeft - targetLeft) > 1) {
+      if (Math.abs(currentTop - targetTop) > tolerance || Math.abs(currentLeft - targetLeft) > tolerance) {
         win.scrollTo({ top: targetTop, left: targetLeft });
       }
     }
@@ -316,40 +343,63 @@
 </script>
 
 <div
-  bind:this={wrapperRef}
-  class="canvas-wrapper"
-  bind:clientWidth={containerWidth}
-  bind:clientHeight={containerHeight}
+  class="slide-canvas-container"
   style:width={width === 'fit-content' ? `${totalInternalWidth * scale}px` : width}
   style:height={height === 'fit-content' ? `${totalInternalHeight * scale}px` : height}
-  onscroll={handleWrapperScroll}
 >
-  <div
-    class="scroll-filler"
-    style:width="{totalInternalWidth * scale}px"
-    style:height="{totalInternalHeight * scale}px"
-    style:transform="translate({offsetX}px, {offsetY}px)"
-    style:transform-origin="top left"
-  ></div>
+  <div class="size-monitor" bind:clientWidth={containerWidth} bind:clientHeight={containerHeight}></div>
 
-  <div class="sticky-viewport">
-    <iframe
-      bind:this={iframeRef}
-      title="Slide Render Space"
-      class="slide-canvas"
-      style="
-        width: {scale > 0 ? containerWidth / scale : containerWidth}px;
-        height: {scale > 0 ? containerHeight / scale : containerHeight}px;
-        transform: translate({offsetX}px, {offsetY}px) scale({scale});
-        opacity: {hasMeasured ? 1 : 0};
-      "
-    ></iframe>
+  <div
+    bind:this={wrapperRef}
+    class="canvas-wrapper"
+    onscroll={handleWrapperScroll}
+  >
+    <div
+      class="scroll-filler"
+      style:width="{totalInternalWidth * scale}px"
+      style:height="{totalInternalHeight * scale}px"
+      style:transform="translate({offsetX}px, {offsetY}px)"
+      style:transform-origin="top left"
+    ></div>
+
+    <div class="sticky-viewport">
+      <iframe
+        bind:this={iframeRef}
+        title="Slide Render Space"
+        class="slide-canvas"
+        style="
+          width: {scale > 0 ? containerWidth / scale : containerWidth}px;
+          height: {scale > 0 ? containerHeight / scale : containerHeight}px;
+          transform: translate({offsetX}px, {offsetY}px) scale({scale});
+          opacity: {hasMeasured ? 1 : 0};
+        "
+      ></iframe>
+    </div>
   </div>
 </div>
 
 <style>
+  .slide-canvas-container {
+    position: relative;
+    overflow: hidden;
+    box-sizing: border-box;
+  }
+
+  .size-monitor {
+    position: absolute;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    visibility: hidden;
+    pointer-events: none;
+    overflow: hidden;
+  }
+
   .canvas-wrapper {
     position: relative;
+    width: 100%;
+    height: 100%;
     overflow: auto;
     box-sizing: border-box;
   }
