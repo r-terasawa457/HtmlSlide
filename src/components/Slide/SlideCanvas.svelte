@@ -2,10 +2,9 @@
   /**
    * @file SlideCanvas.svelte
    * @description ダミースクロール（ハイブリッド同期）方式を採用した高性能スライドレンダラー。
-   * 親コンテナでのスクロール管理とiframe内部のネイティブスクロールを同期させ、
-   * スタイル隔離、自由なスケーリング、および content-visibility による描画最適化を両立します。
    */
 
+  import { onMount } from 'svelte';
   import type { ParsedSlideData } from './types';
 
   let {
@@ -18,6 +17,12 @@
     height = '100%',
     scrollTop = $bindable(0),
     scrollLeft = $bindable(0),
+    scrollbarMode = 'auto',
+    backdropColor = 'transparent',
+    slideGap = 0,
+    boxShadow = 'none',
+    shadowPaddingX = 20,
+    shadowPaddingY = slideGap,
     onresize,
     onscroll,
     onkeydown
@@ -31,6 +36,12 @@
     height?: string;
     scrollTop?: number;
     scrollLeft?: number;
+    scrollbarMode?: 'always' | 'hidden' | 'auto';
+    backdropColor?: string;
+    slideGap?: number;
+    boxShadow?: string;
+    shadowPaddingX?: number;
+    shadowPaddingY?: number;
     onresize?: (width: number, height: number) => void;
     onscroll?: (top: number, left: number) => void;
     onkeydown?: (e: KeyboardEvent) => void;
@@ -49,69 +60,101 @@
   let tickingWrapper = false;
   let tickingIframe = false;
 
-  /**
-   * 内部のスクロールイベントによって適用された最新の位置状態。
-   * `$effect` による二重同期（フィードバックループ）を防止するために使用します。
-   */
   let lastInternalTop = 0;
   let lastInternalLeft = 0;
+  let systemScrollbarWidth = $state(0);
 
-  let totalInternalWidth = $derived(slideWidth);
-  let totalInternalHeight = $derived(
-    mode === 'scroll' ? slideHeight * data.pages.length : slideHeight
+  // パディングなしの純粋な総高さ
+  let pureTotalHeight = $derived(
+    mode === 'scroll'
+      ? slideHeight * data.pages.length + slideGap * (data.pages.length - 1)
+      : slideHeight
   );
 
+  // 1. スクロールバーの出現予測（元のスライドサイズを基準にシミュレート）
+  let effectiveDimensions = $derived.by(() => {
+    if (!hasMeasured || containerWidth === 0 || containerHeight === 0) {
+      return { width: containerWidth, height: containerHeight };
+    }
+
+    let effectiveWidth = containerWidth;
+    let effectiveHeight = containerHeight;
+
+    if (mode === 'scroll') {
+      if (scrollbarMode === 'always') {
+        effectiveWidth = Math.max(0, containerWidth - systemScrollbarWidth);
+      } else if (scrollbarMode === 'auto') {
+        const trialScaleX = containerWidth / slideWidth;
+        const trialScale = fit_mode === 'width' ? trialScaleX : Math.min(trialScaleX, containerHeight / slideHeight);
+        const trialTotalHeight = pureTotalHeight * trialScale;
+
+        if (trialTotalHeight > containerHeight) {
+          effectiveWidth = Math.max(0, containerWidth - systemScrollbarWidth);
+        }
+      }
+    }
+
+    return { width: effectiveWidth, height: effectiveHeight };
+  });
+
+  // 2. 自動スケーリング倍率の決定（元のスライドサイズのみを基準に計算）
   let computedScale = $derived.by(() => {
     if (fit_mode === 'none') return scale;
     if (!hasMeasured || containerWidth === 0 || containerHeight === 0) return 1.0;
     if (slideWidth === 0 || slideHeight === 0) return 1.0;
 
-    const scaleX = containerWidth / slideWidth;
+    const scaleX = effectiveDimensions.width / slideWidth;
     if (fit_mode === 'width') return scaleX;
 
-    const scaleY = containerHeight / slideHeight;
+    const scaleY = effectiveDimensions.height / slideHeight;
     return Math.min(scaleX, scaleY);
   });
 
+  // 3. 確定したスケールを基に、コンテナの物理余白の範囲内で動的パディング量を算出
+  let currentPaddingX = $derived.by(() => {
+    if (mode !== 'scroll' || scale <= 0) return 0;
+    const availableSpaceX = (effectiveDimensions.width - slideWidth * scale) / 2;
+    if (availableSpaceX <= 0) return 0;
+    return Math.min(shadowPaddingX, availableSpaceX / scale);
+  });
+
+  let currentPaddingY = $derived(mode === 'scroll' ? shadowPaddingY : 0);
+
+  // 4. 動的パディングを含めた最終的な内部内寸
+  let totalInternalWidth = $derived(slideWidth + currentPaddingX * 2);
+  let totalInternalHeight = $derived(pureTotalHeight + currentPaddingY * 2);
+
   let offsetX = $derived(
-    containerWidth > totalInternalWidth * scale
-      ? (containerWidth - totalInternalWidth * scale) / 2
+    effectiveDimensions.width > totalInternalWidth * scale
+      ? (effectiveDimensions.width - totalInternalWidth * scale) / 2
       : 0
   );
-
   let offsetY = $derived(
-    containerHeight > totalInternalHeight * scale
-      ? (containerHeight - totalInternalHeight * scale) / 2
+    effectiveDimensions.height > totalInternalHeight * scale
+      ? (effectiveDimensions.height - totalInternalHeight * scale) / 2
       : 0
   );
 
-  /**
-   * 自動計算されたスケール倍率を外部バインドへ同期するライフサイクル。
-   */
   $effect(() => {
     if (fit_mode !== 'none') {
       scale = computedScale;
     }
   });
 
-  /**
-   * 計算されたコンテンツの実描画サイズをコールバック経由で親コンポーネントへ通知します。
-   */
   $effect(() => {
     if (onresize) {
       onresize(totalInternalWidth * scale, totalInternalHeight * scale);
     }
   });
 
-  /**
-   * スクロール位置（scrollTop）から currentPageIndex への同期。
-   */
   $effect(() => {
     if (mode === 'scroll' && slideHeight > 0) {
       const internalScrollTop = scrollTop / (scale || 1.0);
+      const adjustedScrollTop = Math.max(0, internalScrollTop - currentPaddingY);
+      const pitch = slideHeight + slideGap;
       const computedIndex = Math.max(
         0,
-        Math.min(data.pages.length - 1, Math.round(internalScrollTop / slideHeight))
+        Math.min(data.pages.length - 1, Math.round(adjustedScrollTop / pitch))
       );
       if (currentPageIndex !== computedIndex) {
         currentPageIndex = computedIndex;
@@ -120,16 +163,13 @@
     }
   });
 
-  /**
-   * 外部からの currentPageIndex 変更または表示モード（mode）の切り替えをスクロール位置へ同期します。
-   */
   $effect(() => {
     if (mode === 'scroll' && slideHeight > 0) {
       if (lastPageIndex === undefined) {
         lastPageIndex = currentPageIndex;
       }
       if (currentPageIndex !== lastPageIndex || mode !== prevMode) {
-        const targetTop = currentPageIndex * slideHeight * scale;
+        const targetTop = (currentPaddingY + currentPageIndex * (slideHeight + slideGap)) * scale;
         if (Math.abs(scrollTop - targetTop) > 1) {
           scrollTop = targetTop;
         }
@@ -141,25 +181,16 @@
     }
   });
 
-  /**
-   * mode === 'slide' の際、currentPageIndex の変更を lastPageIndex に同期。
-   */
   $effect(() => {
     if (mode === 'slide') {
       lastPageIndex = currentPageIndex;
     }
   });
 
-  /**
-   * 親コンテナのスクロールイベントハンドラー。
-   */
   function handleWrapperScroll() {
     if (!wrapperRef) return;
-    
     const targetTop = wrapperRef.scrollTop;
     const targetLeft = wrapperRef.scrollLeft;
-
-    // 1. 【即時実行】iframeへのDOM同期は遅延なくその場で行う（滑らかさを担保）
     const win = iframeRef?.contentWindow;
     if (win && scale > 0 && typeof win.scrollTo === 'function') {
       win.scrollTo({
@@ -168,7 +199,6 @@
       });
     }
 
-    // 2. 【間引き】重いSvelteの状態更新と外部通知はrAFに逃がす（キビキビ感を担保）
     if (!tickingWrapper) {
       window.requestAnimationFrame(() => {
         scrollTop = targetTop;
@@ -183,9 +213,6 @@
     }
   }
 
-  /**
-   * iframe内部のスクロールイベントハンドラー。
-   */
   function handleIframeScroll() {
     const win = iframeRef?.contentWindow;
     const doc = iframeRef?.contentDocument;
@@ -198,9 +225,7 @@
     const expectedParentLeft = currentIframeLeft * scale;
 
     const tolerance = Math.max(1.5, scale);
-
     if (Math.abs(scrollTop - expectedParentTop) > tolerance || Math.abs(scrollLeft - expectedParentLeft) > tolerance) {
-      // 1. 【即時実行】親コンテナへのDOM同期は遅延なくその場で行う（滑らかさを担保）
       if (wrapperRef) {
         if (typeof wrapperRef.scrollTo === 'function') {
           wrapperRef.scrollTo({ top: expectedParentTop, left: expectedParentLeft });
@@ -210,7 +235,6 @@
         }
       }
 
-      // 2. 【間引き】重いSvelteの状態更新と外部通知はrAFに逃がす（キビキビ感を担保）
       if (!tickingIframe) {
         window.requestAnimationFrame(() => {
           scrollTop = expectedParentTop;
@@ -226,9 +250,6 @@
     }
   }
 
-  /**
-   * iframeの初期環境構築、および各種イベントリスナーのライフサイクル管理。
-   */
   $effect(() => {
     if (!iframeRef) return;
     const win = iframeRef.contentWindow;
@@ -251,22 +272,57 @@
     };
   });
 
-  /**
-   * データや表示モードの変更を検知し、iframe内のHTML構造を再構築およびサイズ計測するライフサイクル。
-   */
   $effect(() => {
     if (!iframeRef) return;
     const doc = iframeRef.contentDocument;
     if (!doc) return;
 
-    const scrollbarHideStyle = `
+    const screenStyle = `
       <style>
         ::-webkit-scrollbar { display: none; }
         html { -ms-overflow-style: none; scrollbar-width: none; }
+        
+        html, body {
+          background: ${backdropColor} !important;
+        }
+        
+        section.page {
+          box-sizing: border-box;
+          box-shadow: ${mode === 'scroll' ? boxShadow : 'none'} !important;
+        }
       </style>
     `;
 
-    const optimizedCommons = [...data.commons, scrollbarHideStyle];
+    const printStyle = `
+      <style>
+        @media print {
+          * {
+            box-shadow: none !important;
+            text-shadow: none !important;
+          }
+          html, body {
+            background: #fff !important;
+          }
+          @page {
+            size: 960pt 540pt;
+            margin: 0;
+          }
+          section.page {
+            width: 960pt !important;
+            height: 540pt !important;
+            position: relative !important;
+            page-break-after: always !important;
+            break-after: page !important;
+            page-break-inside: avoid !important;
+            break-inside: avoid !important;
+            print-color-adjust: exact;
+            -webkit-print-color-adjust: exact;
+          }
+        }
+      </style>
+    `;
+
+    const optimizedCommons = [...data.commons, screenStyle, printStyle];
     if (mode === 'scroll') {
       optimizedCommons.unshift(`
         <style>
@@ -285,7 +341,19 @@
     const attrs = Object.entries(data.containerAttrs)
       .map(([k, v]) => `${k}="${v}"`)
       .join(' ');
-    const containerStyle = `width: ${totalInternalWidth}px; height: ${totalInternalHeight}px; position: relative; overflow: hidden;`;
+    
+    const containerStyle = `
+      width: ${totalInternalWidth}px; 
+      height: ${totalInternalHeight}px;
+      position: relative; 
+      overflow: hidden;
+      display: ${mode === 'scroll' ? 'flex' : 'block'};
+      flex-direction: column;
+      gap: ${mode === 'scroll' ? slideGap : 0}px;
+      padding: ${currentPaddingY}px ${currentPaddingX}px;
+      box-sizing: border-box;
+      background: transparent;
+    `;
 
     doc.body.innerHTML = `<div ${attrs} style="${containerStyle}">${commonsHtml}\n${contentHtml}</div>`;
     doc.body.style.width = `${totalInternalWidth}px`;
@@ -304,13 +372,9 @@
     }
   });
 
-  /**
-   * 外部から直接更新された位置状態を、親コンテナおよび iframe 内部へ強制同期。
-   */
   $effect(() => {
     if (!wrapperRef) return;
 
-    // 内部スクロールイベントによる変更通知（自身のトリガー）である場合は追従処理をバイパス
     const isInternalUpdate = 
       Math.abs(scrollTop - lastInternalTop) < 0.1 && 
       Math.abs(scrollLeft - lastInternalLeft) < 0.1;
@@ -335,10 +399,23 @@
       const doc = win.document;
       const currentTop = doc.documentElement.scrollTop || doc.body.scrollTop;
       const currentLeft = doc.documentElement.scrollLeft || doc.body.scrollLeft;
+
       if (Math.abs(currentTop - targetTop) > tolerance || Math.abs(currentLeft - targetLeft) > tolerance) {
         win.scrollTo({ top: targetTop, left: targetLeft });
       }
     }
+  });
+
+  onMount(() => {
+    const div = document.createElement('div');
+    div.style.width = '100px';
+    div.style.height = '100px';
+    div.style.overflow = 'scroll';
+    div.style.position = 'absolute';
+    div.style.top = '-9999px';
+    document.body.appendChild(div);
+    systemScrollbarWidth = 100 - div.clientWidth;
+    document.body.removeChild(div);
   });
 </script>
 
@@ -352,6 +429,9 @@
   <div
     bind:this={wrapperRef}
     class="canvas-wrapper"
+    class:hide-scrollbar={mode === 'scroll' && scrollbarMode === 'hidden'}
+    style:overflow-y={mode === 'slide' ? (fit_mode === 'none' ? 'auto' : 'hidden') : (scrollbarMode === 'always' ? 'scroll' : 'auto')}
+    style:overflow-x={fit_mode === 'none' ? 'auto' : 'hidden'}
     onscroll={handleWrapperScroll}
   >
     <div
@@ -400,8 +480,15 @@
     position: relative;
     width: 100%;
     height: 100%;
-    overflow: auto;
     box-sizing: border-box;
+  }
+
+  .canvas-wrapper.hide-scrollbar {
+    -ms-overflow-style: none;
+    scrollbar-width: none;
+  }
+  .canvas-wrapper.hide-scrollbar::-webkit-scrollbar {
+    display: none;
   }
 
   .scroll-filler {

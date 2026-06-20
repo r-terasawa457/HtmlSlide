@@ -77,14 +77,24 @@
     }
   });
 
+  function handleFullscreenUpdate(): void {
+    viewerState.updateMainFullscreenState();
+  }
+
   onMount(() => {
     window.addEventListener("message", handleMessage);
     window.addEventListener("keydown", handleKeyDown);
+    window.addEventListener("resize", handleFullscreenUpdate);
+    document.addEventListener("fullscreenchange", handleFullscreenUpdate);
+    
+    viewerState.updateMainFullscreenState();
   });
 
   onDestroy(() => {
     window.removeEventListener("message", handleMessage);
     window.removeEventListener("keydown", handleKeyDown);
+    window.removeEventListener("resize", handleFullscreenUpdate);
+    document.removeEventListener("fullscreenchange", handleFullscreenUpdate);
   });
 </script>
 
@@ -92,7 +102,8 @@
   {#if viewerState.currentMode === "CONSOLE_PRES"}
     <PresenterConsole />
   {:else}
-    <div id="viewer-ui-wrapper" class={viewerState.currentMode === "STANDALONE_PRES" ? "pres-layout" : "normal-layout"}>
+    <div id="viewer-ui-wrapper" class="{viewerState.currentMode === 'STANDALONE_PRES' ?
+      'pres-layout' : 'normal-layout'} {viewerState.isMainFullscreen ? 'fullscreen-layout' : ''}">
       <ControlBar />
       <div id="core-viewport">
         {#if viewerState.currentMode === "SCROLL"}
@@ -103,6 +114,8 @@
             bind:currentPageIndex={viewerState.currentPageIndex}
             bind:scale={viewerState.currentZoom}
             bind:scrollTop={viewerState.modeContexts.SCROLL.scrollTop}
+            slideGap={10}
+            boxShadow={'0 0 10px rgba(0, 0, 0, 0.3)'}
             onkeydown={handleKeyDown}
           />
         {:else if viewerState.currentMode === "STANDALONE_PRES"}
@@ -122,7 +135,17 @@
 
 <style>
   #viewer-main-root { width: 100vw; height: 100vh; display: flex; flex-direction: column; overflow: hidden; background-color: #f5f5f5; }
-  #viewer-ui-wrapper { display: flex; flex-direction: column; width: 100%; height: 100%; }
+  #viewer-ui-wrapper { display: flex; flex-direction: column; width: 100%; height: 100%; position: relative; }
   #core-viewport { flex: 1; width: 100%; height: 100%; position: relative; overflow: hidden; }
   .pres-layout #core-viewport { background-color: #000; }
+
+  /* 全画面時はビューポートを絶対配置に切り替え、ツールバーの高さに関わらず画面全体に広げる */
+  .fullscreen-layout #core-viewport {
+    position: absolute;
+    top: 0;
+    left: 0;
+    width: 100vw;
+    height: 100vh;
+    z-index: 1;
+  }
 </style>

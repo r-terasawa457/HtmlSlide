@@ -54,6 +54,7 @@ globalThis.scrollTo = globalThis.scrollTo || vi.fn();
 
 let mockPageWidth = 800;
 let mockPageHeight = 600;
+let mockSystemScrollbarWidth = 0;
 
 /**
  * 指定されたプロトタイプに対してスライドサイズ計測用のゲッターを注入する
@@ -73,6 +74,30 @@ function injectLayoutMock(proto: any) {
   Object.defineProperty(proto, "offsetHeight", {
     get() {
       if (this.classList.contains("page")) return mockPageHeight;
+      return 0;
+    },
+    configurable: true,
+  });
+
+  /**
+   * コンポーネントの onMount 内で行われる、
+   * スクロールバー幅計測用ダミー要素のクライアント領域サイズをシミュレートするパッチ
+   */
+  Object.defineProperty(proto, "clientWidth", {
+    get() {
+      if (this.style.width === "100px" && this.style.overflow === "scroll") {
+        return 100 - mockSystemScrollbarWidth;
+      }
+      return 0;
+    },
+    configurable: true,
+  });
+
+  Object.defineProperty(proto, "clientHeight", {
+    get() {
+      if (this.style.height === "100px" && this.style.overflow === "scroll") {
+        return 100 - mockSystemScrollbarWidth;
+      }
       return 0;
     },
     configurable: true,
@@ -97,7 +122,6 @@ if (iframeDescriptor && iframeDescriptor.get) {
         if (win.HTMLElement) {
           injectLayoutMock(win.HTMLElement.prototype);
         }
-        // JSDOM環境での "Not implemented: Window's scrollTo()" エラーを防止するために一律スタブ化
         if (
           !win.hasOwnProperty("scrollTo") ||
           typeof win.scrollTo !== "function" ||
@@ -112,9 +136,6 @@ if (iframeDescriptor && iframeDescriptor.get) {
   });
 }
 
-/**
- * テスト用の構造化スライド共通データ
- */
 const mockSlideData = {
   containerAttrs: { class: "slides-root", "data-testid": "slides-container" },
   commons: [
@@ -126,9 +147,6 @@ const mockSlideData = {
   ],
 };
 
-/**
- * 登録されているすべてのコールバックに対して完全なエントリ構造を偽装して通知する
- */
 function triggerResize(element: HTMLElement, width: number, height: number) {
   Object.defineProperties(element, {
     clientWidth: { value: width, configurable: true },
@@ -164,6 +182,7 @@ describe("SlideCanvas Component (Vitest)", () => {
 
     mockPageWidth = 800;
     mockPageHeight = 600;
+    mockSystemScrollbarWidth = 0;
     observerMap.clear();
 
     return () => {
@@ -457,5 +476,21 @@ describe("SlideCanvas Component (Vitest)", () => {
     await tick();
 
     expect(props.scrollTop).toBe(600);
+  });
+
+  test("N-10: scrollbarMode === 'hidden' のとき、canvas-wrapper に hide-scrollbar クラスが付与されること", async () => {
+    mount(SlideCanvas, {
+      target,
+      props: {
+        data: mockSlideData,
+        mode: "scroll",
+        scrollbarMode: "hidden",
+      },
+    });
+
+    await tick();
+
+    const wrapper = target.querySelector(".canvas-wrapper") as HTMLElement;
+    expect(wrapper?.classList.contains("hide-scrollbar")).toBe(true);
   });
 });

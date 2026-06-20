@@ -90,6 +90,17 @@ export class ViewerState {
   /** スライドの表示倍率 */
   currentZoom = $state(1.0);
 
+  /** メインウィンドウがFullScreen APIによって全画面化されているか */
+  isMainApiFullscreen = $state(false);
+
+  /** メインウィンドウがブラウザ制御（F11等）によって全画面化されているか */
+  isMainNativeFullscreen = $state(false);
+
+  /** メインウィンドウがいずれかの方式で全画面化されているか */
+  isMainFullscreen = $derived(
+    this.isMainApiFullscreen || this.isMainNativeFullscreen,
+  );
+
   /** 描画コンポーネントへスクロール位置やページの強制変更命令を媒介するシグナル */
   navigationSignal = $state<{
     page: number;
@@ -188,6 +199,29 @@ export class ViewerState {
       page: this.modeContexts[mode].currentPage,
       source: "program",
     };
+  }
+
+  /**
+   * メインウィンドウのフルスクリーン状態を切り替えます。
+   */
+  toggleMainFullscreen(): void {
+    if (!document.fullscreenElement) {
+      document.documentElement.requestFullscreen().catch((err) => {
+        console.error(`Failed to enable fullscreen: ${err.message}`);
+      });
+    } else {
+      document.exitFullscreen();
+    }
+  }
+
+  /**
+   * メインウィンドウのフルスクリーン状態を判定・更新します。
+   */
+  updateMainFullscreenState(): void {
+    this.isMainApiFullscreen = !!document.fullscreenElement;
+    this.isMainNativeFullscreen =
+      window.matchMedia("(display-mode: fullscreen)").matches &&
+      !this.isMainApiFullscreen;
   }
 }
 
