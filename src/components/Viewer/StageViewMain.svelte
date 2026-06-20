@@ -9,13 +9,22 @@
   let renderMode = $state<"SCROLL" | "SLIDE">("SLIDE");
   let currentPageIndex = $state(0);
   let currentZoom = $state(1.0);
+  
+  // メインから送られてくる「等倍空間基準」のスクロール位置を保持する状態
+  let internalScrollTopFromMain = $state(0);
+  let internalScrollLeftFromMain = $state(0);
+
+  // SlideCanvasのbind先に指定する「StageViewの物理ピクセル基準」のスクロール位置
   let scrollTop = $state(0);
+  let scrollLeft = $state(0);
+
+  let syncUnscaledViewport = $state<{ centerTop: number; centerLeft: number; width: number; height: number } | undefined>(undefined);
+
   let slideData = $state<ParsedSlideData>({
     containerAttrs: {},
     commons: [],
     pages: []
   });
-
   let isApiFullscreen = $state(false);
   let isNativeFullscreen = $state(false);
   let isAnyFullscreen = $derived(isApiFullscreen || isNativeFullscreen);
@@ -30,18 +39,34 @@
   let isProgrammaticResize = false;
   let resizeTimeoutId: number | undefined;
 
+  let laserState = $state({ active: false, x: 0, y: 0 });
+
   function handleMessage(e: MessageEvent): void {
     if (!e.data || e.data.type !== "sync_stage") return;
     renderMode = e.data.renderMode;
     currentPageIndex = e.data.currentPage - 1;
-    scrollTop = e.data.scrollTop;
+    
+    // 等倍ビューポートの受信
+    if (e.data.unscaledViewport !== undefined) {
+      syncUnscaledViewport = e.data.unscaledViewport;
+    }
+
     if (e.data.data !== undefined) {
       slideData = e.data.data;
     }
     if (e.data.title !== undefined) {
       appState.title = e.data.title;
     }
+    if (e.data.laserState !== undefined) {
+      laserState = e.data.laserState;
+    }
   }
+
+  // StageView側のスケール、またはメイン側の位置が動いたら、StageViewの物理ピクセルに変換して適用
+  $effect(() => {
+    scrollTop = internalScrollTopFromMain * currentZoom;
+    scrollLeft = internalScrollLeftFromMain * currentZoom;
+  });
 
   /**
    * フルスクリーン状態を判定・更新します。
@@ -116,7 +141,13 @@
     latestContentHeight = height;
   }
 
+  /**
+   * ウィンドウの自動リサイズ処理
+   */
   $effect(() => {
+    // 【重要】SCROLLモードの時はウィンドウリサイズを行わない（無限ループ・ガタつき防止）
+    if (renderMode !== "SLIDE") return;
+
     const w = latestContentWidth;
     const h = latestContentHeight;
     const resizing = isUserResizing;
@@ -174,7 +205,15 @@
     bind:currentPageIndex
     bind:scale={currentZoom}
     bind:scrollTop
-    onresize={handleSlideResize}
+    bind:scrollLeft
+    syncUnscaledViewport={syncUnscaledViewport} onresize={handleSlideResize}
+    slideGap={renderMode === "SCROLL" ? 10 : 0}
+    boxShadow={renderMode === "SCROLL" ? '0 0 10px rgba(0, 0, 0, 0.3)' : 'none'}
+    
+    laserActive={laserState.active}
+    laserX={laserState.x}
+    laserY={laserState.y}
+    isPresenter={false}
   />
 
   {#if !isNativeFullscreen}

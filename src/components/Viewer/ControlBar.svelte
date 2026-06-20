@@ -1,4 +1,9 @@
 <script lang="ts">
+  /**
+   * @component ControlBar
+   * @description 画面上部に表示されるコントロールツールバー。
+   * ページの遷移、表示倍率の変更、表示モードの切り替え、およびレーザーポインターのON/OFF制御UIを提供します。
+   */
   import { getAppState } from "../../states/AppState.svelte";
   import { getViewerState } from "../../states/ViewerState.svelte";
   import { AssetProvider } from "../../scripts/AssetProvider";
@@ -130,6 +135,17 @@
         >
           <svg class="w-5 h-5 {viewerState.zoomMode === 'FIT_WIDTH' ? 'fill-[#4285f4]' : 'fill-white'}" viewBox="0 0 24 24"><path d="M2 13h20v-2H2v2zM10 5l-2 2 2 2V5zm4 0l2 2-2 2V5zm10 14l-2-2 2-2v4zm4 0l2-2-2-2v4z" /></svg>
         </button>
+
+        <button
+          onclick={() => viewerState.laserActive = !viewerState.laserActive}
+          title={viewerState.laserActive ? "レーザーポインターをオフ" : "レーザーポインターをオン"}
+          class="p-1.5 rounded transition-colors ml-1 {viewerState.laserActive ? 'bg-[rgba(255,23,68,0.2)]' : 'hover:bg-[rgba(255,255,255,0.1)]'}"
+        >
+          <svg class="w-5 h-5 {viewerState.laserActive ? 'fill-[#ff1744]' : 'fill-white'}" viewBox="0 0 24 24">
+            <circle cx="12" cy="12" r="6" />
+            <path d="M12 2v2M12 20v2M2 12h2M20 12h2" stroke={viewerState.laserActive ? "#ff1744" : "#ffffff"} stroke-width="2" stroke-linecap="round"/>
+          </svg>
+        </button>
       </div>
     </div>
 
@@ -154,35 +170,31 @@
   </div>
 </div>
 
-
 <style>
-  /* 全画面時のホバー感知コンテナ */
   .fullscreen-toolbar-container {
     position: fixed;
     top: 0;
     left: 0;
     width: 100%;
-    height: 48px; /* マウスを反応させるための最上部の感知領域 */
+    height: 48px;
     z-index: 100;
     transition: height 0.2s ease;
   }
 
-  /* 初期状態（非ホバー時）はツールバーを透明化し、上部へ隠す */
   .fullscreen-toolbar-container #toolbar {
     opacity: 0;
     transform: translateY(-100%);
     transition: opacity 0.3s ease, transform 0.3s ease;
-    pointer-events: none; /* 隠れている間は背後のスライド操作を妨げない */
+    pointer-events: none;
   }
 
-  /* 感知領域にマウスが乗った場合 */
   .fullscreen-toolbar-container:hover {
-    height: 48px; /* ツールバーの本来の高さまで拡張 */
+    height: 48px;
   }
 
   .fullscreen-toolbar-container:hover #toolbar {
     opacity: 1;
     transform: translateY(0);
-    pointer-events: auto; /* 表示されたらボタン操作を受け付ける */
+    pointer-events: auto;
   }
 </style>

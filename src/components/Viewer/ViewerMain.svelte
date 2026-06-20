@@ -1,7 +1,6 @@
 <script lang="ts">
   /**
    * @component ViewerMain
-   * @description 親ウィンドウのメイン画面表示を統括し、表示モードの切り替え制御、UIレイアウトの動的コンポーズ、および外部ステージウィンドウへの一方向同期メッセージングを担うマスターコンポーネント。
    */
   import { onMount, onDestroy } from "svelte";
   import { getAppState } from "../../states/AppState.svelte";
@@ -25,9 +24,8 @@
         return "none";
     }
   });
-
+  
   function handleMessage(e: MessageEvent): void {
-    console.log("Received message in ViewerMain:", e.data);
     if (e.data && e.data.type === "stage_ready") {
       isStageReady = true;
     }
@@ -69,11 +67,7 @@
   $effect(() => {
     const stage = viewerState.stageWindow;
     if (stage && !stage.closed && isStageReady) {
-      const syncPayload = {
-        ...viewerState.stageSyncData,
-        title: appState.title
-      };
-      stage.postMessage(syncPayload, "*");
+      stage.postMessage(viewerState.stageSyncData, "*");
     }
   });
 
@@ -86,7 +80,6 @@
     window.addEventListener("keydown", handleKeyDown);
     window.addEventListener("resize", handleFullscreenUpdate);
     document.addEventListener("fullscreenchange", handleFullscreenUpdate);
-    
     viewerState.updateMainFullscreenState();
   });
 
@@ -98,36 +91,50 @@
   });
 </script>
 
+{#snippet sharedCanvas()}
+  <SlideCanvas
+    data={viewerState.slideData}
+    mode={viewerState.currentMode === "SCROLL" ? "scroll" : "slide"}
+    fit_mode={fitMode}
+    bind:currentPageIndex={viewerState.currentPageIndex}
+    bind:scale={viewerState.currentZoom}
+    scrollTop={viewerState.currentMode === "SCROLL" ? viewerState.modeContexts.SCROLL.scrollTop * viewerState.currentZoom : 0}
+    scrollLeft={viewerState.currentMode === "SCROLL" ? viewerState.modeContexts.SCROLL.scrollLeft * viewerState.currentZoom : 0}
+    slideGap={viewerState.currentMode === "SCROLL" ? 10 : 0}
+    boxShadow={viewerState.currentMode === "SCROLL" ? '0 0 10px rgba(0, 0, 0, 0.3)' : 'none'}
+    
+    onscroll={(top, left, info) => {
+      if (viewerState.currentMode === "SCROLL") {
+        viewerState.updateScrollTop(top);
+        viewerState.updateScrollLeft(left);
+        // 等倍ビューポート情報の同期
+        if (info) {
+          viewerState.updateUnscaledViewport(
+            info.unscaledCenterTop,
+            info.unscaledCenterLeft,
+            info.unscaledWidth,
+            info.unscaledHeight
+          );
+        }
+      }
+    }}
+    
+    onkeydown={handleKeyDown}
+    bind:laserActive={viewerState.laserActive}
+    bind:laserX={viewerState.laserX}
+    bind:laserY={viewerState.laserY}
+    isPresenter={true}
+  />
+{/snippet}
+
 <div id="viewer-main-root">
   {#if viewerState.currentMode === "CONSOLE_PRES"}
-    <PresenterConsole />
+    <PresenterConsole canvas={sharedCanvas} />
   {:else}
-    <div id="viewer-ui-wrapper" class="{viewerState.currentMode === 'STANDALONE_PRES' ?
-      'pres-layout' : 'normal-layout'} {viewerState.isMainFullscreen ? 'fullscreen-layout' : ''}">
+    <div id="viewer-ui-wrapper" class="{viewerState.currentMode === 'STANDALONE_PRES' ? 'pres-layout' : 'normal-layout'} {viewerState.isMainFullscreen ? 'fullscreen-layout' : ''}">
       <ControlBar />
       <div id="core-viewport">
-        {#if viewerState.currentMode === "SCROLL"}
-          <SlideCanvas
-            data={viewerState.slideData}
-            mode="scroll"
-            fit_mode={fitMode}
-            bind:currentPageIndex={viewerState.currentPageIndex}
-            bind:scale={viewerState.currentZoom}
-            bind:scrollTop={viewerState.modeContexts.SCROLL.scrollTop}
-            slideGap={10}
-            boxShadow={'0 0 10px rgba(0, 0, 0, 0.3)'}
-            onkeydown={handleKeyDown}
-          />
-        {:else if viewerState.currentMode === "STANDALONE_PRES"}
-          <SlideCanvas
-            data={viewerState.slideData}
-            mode="slide"
-            fit_mode={fitMode}
-            bind:currentPageIndex={viewerState.currentPageIndex}
-            bind:scale={viewerState.currentZoom}
-            onkeydown={handleKeyDown}
-          />
-        {/if}
+        {@render sharedCanvas()}
       </div>
     </div>
   {/if}
@@ -138,14 +145,5 @@
   #viewer-ui-wrapper { display: flex; flex-direction: column; width: 100%; height: 100%; position: relative; }
   #core-viewport { flex: 1; width: 100%; height: 100%; position: relative; overflow: hidden; }
   .pres-layout #core-viewport { background-color: #000; }
-
-  /* 全画面時はビューポートを絶対配置に切り替え、ツールバーの高さに関わらず画面全体に広げる */
-  .fullscreen-layout #core-viewport {
-    position: absolute;
-    top: 0;
-    left: 0;
-    width: 100vw;
-    height: 100vh;
-    z-index: 1;
-  }
+  .fullscreen-layout #core-viewport { position: absolute; top: 0; left: 0; width: 100vw; height: 100vh; z-index: 1; }
 </style>

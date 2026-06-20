@@ -2,11 +2,14 @@
   /**
    * @file SlideCanvas.svelte
    * @description ダミースクロール（ハイブリッド同期）方式を採用した高性能スライドレンダラー。
+   * レーザーポインター機能は、ネイティブスクロールと完全に同期させるため、scroll-filler（スクロール空間）の直下に配置されます。
    */
 
   import { onMount } from 'svelte';
   import type { ParsedSlideData } from './types';
+  import LaserPointerOverlay from './LaserPointerOverlay.svelte';
 
+  /** @types Props */
   let {
     data,
     mode = 'slide',
@@ -17,6 +20,7 @@
     height = '100%',
     scrollTop = $bindable(0),
     scrollLeft = $bindable(0),
+    syncUnscaledViewport = undefined,
     scrollbarMode = 'auto',
     backdropColor = 'transparent',
     slideGap = 0,
@@ -25,7 +29,11 @@
     shadowPaddingY = slideGap,
     onresize,
     onscroll,
-    onkeydown
+    onkeydown,
+    laserActive = $bindable(false),
+    laserX = $bindable(0),
+    laserY = $bindable(0),
+    isPresenter = false
   } = $props<{
     data: ParsedSlideData;
     mode?: 'scroll' | 'slide';
@@ -36,6 +44,7 @@
     height?: string;
     scrollTop?: number;
     scrollLeft?: number;
+    syncUnscaledViewport?: { centerTop: number; centerLeft: number; width: number; height: number };
     scrollbarMode?: 'always' | 'hidden' | 'auto';
     backdropColor?: string;
     slideGap?: number;
@@ -43,8 +52,12 @@
     shadowPaddingX?: number;
     shadowPaddingY?: number;
     onresize?: (width: number, height: number) => void;
-    onscroll?: (top: number, left: number) => void;
+    onscroll?: (top: number, left: number, info?: { unscaledCenterTop: number; unscaledCenterLeft: number; unscaledWidth: number; unscaledHeight: number }) => void;
     onkeydown?: (e: KeyboardEvent) => void;
+    laserActive?: boolean;
+    laserX?: number;
+    laserY?: number;
+    isPresenter?: boolean;
   }>();
 
   let wrapperRef = $state<HTMLDivElement | null>(null);
@@ -64,14 +77,12 @@
   let lastInternalLeft = 0;
   let systemScrollbarWidth = $state(0);
 
-  // パディングなしの純粋な総高さ
   let pureTotalHeight = $derived(
     mode === 'scroll'
       ? slideHeight * data.pages.length + slideGap * (data.pages.length - 1)
       : slideHeight
   );
 
-  // 1. スクロールバーの出現予測（元のスライドサイズを基準にシミュレート）
   let effectiveDimensions = $derived.by(() => {
     if (!hasMeasured || containerWidth === 0 || containerHeight === 0) {
       return { width: containerWidth, height: containerHeight };
@@ -97,8 +108,16 @@
     return { width: effectiveWidth, height: effectiveHeight };
   });
 
-  // 2. 自動スケーリング倍率の決定（元のスライドサイズのみを基準に計算）
   let computedScale = $derived.by(() => {
+    // 外部からの等倍ビューポート領域の強制同期がある場合、それをコンテナにアスペクト比維持で収めるスケールを最優先する
+    if (mode === 'scroll' && syncUnscaledViewport && syncUnscaledViewport.width > 0 && syncUnscaledViewport.height > 0) {
+      if (containerWidth > 0 && containerHeight > 0) {
+        const scaleX = containerWidth / syncUnscaledViewport.width;
+        const scaleY = containerHeight / syncUnscaledViewport.height;
+        return Math.min(scaleX, scaleY); // 完全に内包(contain)させる
+      }
+    }
+
     if (fit_mode === 'none') return scale;
     if (!hasMeasured || containerWidth === 0 || containerHeight === 0) return 1.0;
     if (slideWidth === 0 || slideHeight === 0) return 1.0;
@@ -110,7 +129,6 @@
     return Math.min(scaleX, scaleY);
   });
 
-  // 3. 確定したスケールを基に、コンテナの物理余白の範囲内で動的パディング量を算出
   let currentPaddingX = $derived.by(() => {
     if (mode !== 'scroll' || scale <= 0) return 0;
     const availableSpaceX = (effectiveDimensions.width - slideWidth * scale) / 2;
@@ -120,7 +138,6 @@
 
   let currentPaddingY = $derived(mode === 'scroll' ? shadowPaddingY : 0);
 
-  // 4. 動的パディングを含めた最終的な内部内寸
   let totalInternalWidth = $derived(slideWidth + currentPaddingX * 2);
   let totalInternalHeight = $derived(pureTotalHeight + currentPaddingY * 2);
 
@@ -191,6 +208,7 @@
     if (!wrapperRef) return;
     const targetTop = wrapperRef.scrollTop;
     const targetLeft = wrapperRef.scrollLeft;
+
     const win = iframeRef?.contentWindow;
     if (win && scale > 0 && typeof win.scrollTo === 'function') {
       win.scrollTo({
@@ -250,6 +268,49 @@
     }
   }
 
+  /**
+   * 発表者のマウスイベントを検知し、iframe内のネイティブスクロール量を加算してスライド絶対比率座標に変換します。
+   */
+  /**
+   * 発表者のマウスイベントを検知し、iframe内のネイティブスクロール量を加算してスライド絶対比率座標に変換します。
+   * 範囲外にカーソルがある場合は、無効な座標（-1）を設定します。
+   */
+  function handlePresenterMouseMove(e: MouseEvent): void {
+    if (!isPresenter || !laserActive) return;
+    const win = iframeRef?.contentWindow;
+    const doc = iframeRef?.contentDocument;
+    if (!win || !doc) return;
+
+    const currentIframeTop = doc.documentElement.scrollTop || doc.body.scrollTop;
+    const currentIframeLeft = doc.documentElement.scrollLeft || doc.body.scrollLeft;
+
+    const slidePxX = e.clientX + currentIframeLeft;
+    const slidePxY = e.clientY + currentIframeTop;
+
+    if (totalInternalWidth > 0 && totalInternalHeight > 0) {
+      const targetX = slidePxX / totalInternalWidth;
+      const targetY = slidePxY / totalInternalHeight;
+
+      // 1pxでもスライドの外側に出た場合は無効値を設定
+      if (targetX < 0 || targetX > 1 || targetY < 0 || targetY > 1) {
+        laserX = -1;
+        laserY = -1;
+      } else {
+        laserX = targetX;
+        laserY = targetY;
+      }
+    }
+  }
+
+  /**
+   * 発表者のマウスがスライド領域外に出た際に、レーザーポインターを非表示にします。
+   */
+  function handlePresenterMouseLeave(): void {
+    if (!isPresenter || !laserActive) return;
+    laserX = -1;
+    laserY = -1;
+  }
+
   $effect(() => {
     if (!iframeRef) return;
     const win = iframeRef.contentWindow;
@@ -272,6 +333,69 @@
     };
   });
 
+    $effect(() => {
+      if (!iframeRef) return;
+      const win = iframeRef.contentWindow;
+      const doc = iframeRef.contentDocument;
+      if (!win || !doc) return;
+
+      if (isPresenter && laserActive) {
+        win.addEventListener('mousemove', handlePresenterMouseMove, { passive: true });
+        doc.addEventListener('mouseleave', handlePresenterMouseLeave); // 追加
+        doc.body.style.cursor = 'none';
+      } else {
+        doc.body.style.cursor = 'default';
+      }
+
+      return () => {
+        if (win) win.removeEventListener('mousemove', handlePresenterMouseMove);
+        if (doc) {
+          doc.removeEventListener('mouseleave', handlePresenterMouseLeave); // 追加
+          if (doc.body) doc.body.style.cursor = 'default';
+        }
+      };
+    });
+
+  $effect(() => {
+      if (onscroll && isPresenter && hasMeasured && containerWidth > 0 && containerHeight > 0 && scale > 0) {
+        const unscaledWidth = containerWidth / scale;
+        const unscaledHeight = containerHeight / scale;
+        const unscaledCenterTop = (scrollTop / scale) + unscaledHeight / 2;
+        const unscaledCenterLeft = (scrollLeft / scale) + unscaledWidth / 2;
+        
+        onscroll(scrollTop, scrollLeft, {
+          unscaledCenterTop,
+          unscaledCenterLeft,
+          unscaledWidth,
+          unscaledHeight
+        });
+      }
+    });
+
+    $effect(() => {
+    if (!isPresenter && mode === 'scroll' && syncUnscaledViewport && scale > 0) {
+      if (containerWidth > 0 && containerHeight > 0) {
+        const targetTop = (syncUnscaledViewport.centerTop - (containerHeight / scale) / 2) * scale;
+        const targetLeft = (syncUnscaledViewport.centerLeft - (containerWidth / scale) / 2) * scale;
+
+        const tolerance = Math.max(1.5, scale);
+        if (wrapperRef && (Math.abs(wrapperRef.scrollTop - targetTop) > tolerance || Math.abs(wrapperRef.scrollLeft - targetLeft) > tolerance)) {
+          if (typeof wrapperRef.scrollTo === 'function') {
+            wrapperRef.scrollTo({ top: targetTop, left: targetLeft });
+          } else {
+            wrapperRef.scrollTop = targetTop;
+            wrapperRef.scrollLeft = targetLeft;
+          }
+          scrollTop = targetTop;
+          scrollLeft = targetLeft;
+          lastInternalTop = targetTop;
+          lastInternalLeft = targetLeft;
+        }
+      }
+    }
+  });
+
+
   $effect(() => {
     if (!iframeRef) return;
     const doc = iframeRef.contentDocument;
@@ -281,11 +405,7 @@
       <style>
         ::-webkit-scrollbar { display: none; }
         html { -ms-overflow-style: none; scrollbar-width: none; }
-        
-        html, body {
-          background: ${backdropColor} !important;
-        }
-        
+        html, body { background: ${backdropColor} !important; }
         section.page {
           box-sizing: border-box;
           box-shadow: ${mode === 'scroll' ? boxShadow : 'none'} !important;
@@ -296,17 +416,9 @@
     const printStyle = `
       <style>
         @media print {
-          * {
-            box-shadow: none !important;
-            text-shadow: none !important;
-          }
-          html, body {
-            background: #fff !important;
-          }
-          @page {
-            size: 960pt 540pt;
-            margin: 0;
-          }
+          * { box-shadow: none !important; text-shadow: none !important; }
+          html, body { background: #fff !important; }
+          @page { size: 960pt 540pt; margin: 0; }
           section.page {
             width: 960pt !important;
             height: 540pt !important;
@@ -338,10 +450,11 @@
     const contentHtml = mode === 'scroll' 
       ? data.pages.join('\n') 
       : (data.pages[currentPageIndex] ?? '');
+
     const attrs = Object.entries(data.containerAttrs)
       .map(([k, v]) => `${k}="${v}"`)
       .join(' ');
-    
+
     const containerStyle = `
       width: ${totalInternalWidth}px; 
       height: ${totalInternalHeight}px;
@@ -440,7 +553,14 @@
       style:height="{totalInternalHeight * scale}px"
       style:transform="translate({offsetX}px, {offsetY}px)"
       style:transform-origin="top left"
-    ></div>
+    >
+      <LaserPointerOverlay
+        active={laserActive}
+        x={laserX}
+        y={laserY}
+        {isPresenter}
+      />
+    </div>
 
     <div class="sticky-viewport">
       <iframe
@@ -492,10 +612,11 @@
   }
 
   .scroll-filler {
-    pointer-events: none;
     position: absolute;
     top: 0;
     left: 0;
+    z-index: 10;
+    pointer-events: none;
   }
 
   .sticky-viewport {
