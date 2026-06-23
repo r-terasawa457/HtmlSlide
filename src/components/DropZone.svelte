@@ -8,20 +8,22 @@
   const appState = getAppState();
   let dropZoneEl = $state<HTMLElement | null>(null);
   let scanner: FileDropScanner | null = null;
+  let isDragover = $state(false);
 
   onMount(() => {
     if (!dropZoneEl) return;
     scanner = new FileDropScanner({
       target: dropZoneEl,
-      hoverClass: "dragover",
+      hoverClass: "dragover", 
       onDrop: async (result) => {
+        isDragover = false;
         const { files, isFallbackMode } = result;
 
         if (isFallbackMode && files.length === 1 && files[0]?.file.size === 0) {
           alert(
             "【ブラウザの制限による通知】\n" +
-              "ローカルファイル（file://）環境で実行されているため、ブラウザのセキュリティ制限によりフォルダ構造の直接解析に失敗しました。\n\n" +
-              "お手数ですが、フォルダを開いて中身のファイル群をすべて選択（Ctrl + A）し、それらをまとめてドロップしてください。",
+            "ローカルファイル（file://）環境で実行されているため、ブラウザのセキュリティ制限によりフォルダ構造の直接解析に失敗しました。\n\n" +
+            "お手数ですが、フォルダを開いて中身のファイル群をすべて選択（Ctrl + A）し、それらをまとめてドロップしてください。",
           );
           return;
         }
@@ -29,40 +31,46 @@
         await processDroppedFiles(files);
       },
       onError: (err) => {
+        isDragover = false;
         console.error("ファイルのパースに失敗しました:", err);
         alert("ファイルの解析に失敗しました。");
       },
     });
+
+    const handleDragEnter = () => { isDragover = true; };
+    const handleDragLeave = () => { isDragover = false; };
+    dropZoneEl.addEventListener("dragenter", handleDragEnter);
+    dropZoneEl.addEventListener("dragleave", handleDragLeave);
+
+    return () => {
+      if (dropZoneEl) {
+        dropZoneEl.removeEventListener("dragenter", handleDragEnter);
+        dropZoneEl.removeEventListener("dragleave", handleDragLeave);
+      }
+    };
   });
 
   onDestroy(() => {
-    if (scanner) {
-      scanner.destroy();
-    }
+    if (scanner) scanner.destroy();
   });
 
-  async function processDroppedFiles(
-    droppedFiles: ScannedFile[],
-  ): Promise<void> {
+  async function processDroppedFiles(droppedFiles: ScannedFile[]): Promise<void> {
     const assetsMap: Record<string, string> = {};
     const duplicateFiles: string[] = [];
     let mdContent = "";
     let mdTitle = "";
-
     let basePrefix = "";
+
     const mdDropped = droppedFiles.find((d) => d.file.name.endsWith(".md"));
     if (mdDropped) {
       const lastSlash = mdDropped.relativePath.lastIndexOf("/");
       if (lastSlash >= 0) {
-        basePrefix = mdDropped.relativePath
-          .substring(0, lastSlash + 1)
-          .toLowerCase();
+        basePrefix = mdDropped.relativePath.substring(0, lastSlash + 1).toLowerCase();
       }
     }
 
     for (const dropped of droppedFiles) {
       const { relativePath, file } = dropped;
-
       let key = relativePath.toLowerCase();
       if (basePrefix && key.startsWith(basePrefix)) {
         key = key.substring(basePrefix.length);
@@ -108,16 +116,12 @@
     }
 
     if (duplicateFiles.length > 0) {
-      alert(
-        `以下のファイル名または相対パスが重複しているため、処理を中断しました:\n${duplicateFiles.join("\n")}`,
-      );
+      alert(`以下のファイル名または相対パスが重複しているため、処理を中断しました:\n${duplicateFiles.join("\n")}`);
       return;
     }
 
     if (!mdContent) {
-      alert(
-        "Markdownファイル(.md)が見つかりません。ファイルまたはフォルダ内のファイルをすべて選択してドロップしてください。",
-      );
+      alert("Markdownファイル(.md)が見つかりません。ファイルまたはフォルダ内のファイルをすべて選択してドロップしてください。");
       return;
     }
 
@@ -127,7 +131,6 @@
       html: string;
     };
 
-    // AppStateへの確実なデータ流し込み
     appState.title = result.title || mdTitle;
     appState.slidesHtml = result.html;
     appState.assetsMap = assetsMap;
@@ -135,48 +138,14 @@
   }
 </script>
 
-<div bind:this={dropZoneEl} id="drop-zone">
-  <div class="drop-message">
-    <h3>Markdownファイルをここにドロップ</h3>
-    <p>file:// プロトコルによる完全スタンドアロン動作に対応しています</p>
+<div 
+  bind:this={dropZoneEl} 
+  id="drop-zone"
+  class="fixed top-0 left-0 w-screen h-screen text-[#e8eaed] flex justify-center items-center border-4 border-dashed border-[#3c4043] m-0 box-border z-[9999] transition-colors duration-200
+         {isDragover ? 'bg-[#2d2f34] border-[#8ab4f8]' : 'bg-[#202124]'}"
+>
+  <div class="text-center pointer-events-none">
+    <h3 class="text-2xl mb-2 font-bold">Markdownファイルをここにドロップ</h3>
+    <p class="text-[#9aa0a6] text-sm">file:// プロトコルによる完全スタンドアロン動作に対応しています</p>
   </div>
 </div>
-
-<style>
-  #drop-zone {
-    position: fixed;
-    top: 0;
-    left: 0;
-    width: 100vw;
-    height: 100vh;
-    background: #202124;
-    color: #e8eaed;
-    display: flex;
-    justify-content: center;
-    align-items: center;
-    border: 4px dashed #3c4043;
-    margin: 0;
-    box-sizing: border-box;
-    z-index: 9999;
-    font-family: sans-serif;
-    transition:
-      background-color 0.2s,
-      border-color 0.2s;
-  }
-  :global(#drop-zone.dragover) {
-    background: #2d2f34 !important;
-    border-color: #8ab4f8 !important;
-  }
-  .drop-message {
-    text-align: center;
-    pointer-events: none;
-  }
-  .drop-message h3 {
-    font-size: 24px;
-    margin-bottom: 8px;
-  }
-  .drop-message p {
-    color: #9aa0a6;
-    font-size: 14px;
-  }
-</style>

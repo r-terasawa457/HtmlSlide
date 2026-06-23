@@ -2,11 +2,10 @@
   /**
    * @component App
    * @description アプリケーションのエントリーポイント。
-   * アプリケーション全体のグローバル状態（AppState, ViewerState）を初期化し、ファイルの読み込み状態（DropZone）やメインビューア（ViewerMain）、印刷管理（PrintManager）の出し分けを統括します。
    */
-  import "../css/viewer.css";
+  import "../css/app.css"; // Tailwind v4 のエントリーポイントに変更
   import DropZone from "./DropZone.svelte";
-  import ViewerMain from "./ViewerMain.svelte";
+  import ViewerMain from "./Viewer/ViewerMain.svelte";
   import PrintManager from "./Print/PrintManager.svelte";
   import { initAppState } from "../states/AppState.svelte";
   import { initViewerState } from "../states/ViewerState.svelte";
@@ -21,12 +20,14 @@
   });
 </script>
 
-{#if !appState.isLoaded}
-  <DropZone />
-{:else}
-  <ViewerMain />
+<div id="viewer-ui" class="absolute top-0 left-0 w-full h-full flex flex-col bg-[#525659] text-white font-sans overflow-hidden select-none">
+  {#if !appState.isLoaded}
+    <DropZone />
+  {:else}
+    <ViewerMain />
 
-  {#if appState.isPrintRequested}
-    <PrintManager />
+    {#if appState.isPrintRequested}
+      <PrintManager />
+    {/if}
   {/if}
-{/if}
+</div>

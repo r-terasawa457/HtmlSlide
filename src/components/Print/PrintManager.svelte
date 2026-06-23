@@ -1,34 +1,38 @@
 <script lang="ts">
-  import { tick } from "svelte";
+  import { onMount, tick } from "svelte";
   import { getAppState } from "../../states/AppState.svelte";
-  import SlideIframe from "../Common/SlideIframe.svelte";
+  import { parseSlidesHtml } from "../../states/ViewerState.svelte";
+  import SlideCanvas from "../Slide/SlideCanvas.svelte";
 
   const appState = getAppState();
+  const slideData = $derived(parseSlidesHtml(appState.slidesHtml));
 
-  /**
-   * iframeの読み込み完了時に印刷ダイアログを起動し、終了ライフサイクルを管理します。
-   */
-  async function handlePrintInit(_doc: Document, iframeWin: Window): Promise<void> {
+  onMount(async () => {
     await tick();
+    // SlideCanvas が iframe をロードし描画するのを少し待ってから印刷を実行
+    setTimeout(() => {
+      const iframe = document.querySelector(".print-isolated-container iframe") as HTMLIFrameElement | null;
+      if (iframe && iframe.contentWindow) {
+        const iframeWin = iframe.contentWindow;
+        
+        const handleAfterPrint = () => {
+          iframeWin.removeEventListener("afterprint", handleAfterPrint);
+          appState.clearPrintRequest();
+        };
 
-    const handleAfterPrint = () => {
-      iframeWin.removeEventListener("afterprint", handleAfterPrint);
-
-      // ブラウザの印刷スレッド脱出後に安全に状態をクリア
-      setTimeout(() => {
+        iframeWin.addEventListener("afterprint", handleAfterPrint);
+        iframeWin.focus();
+        iframeWin.print();
+      } else {
+        window.print();
         appState.clearPrintRequest();
-      }, 0);
-    };
-
-    iframeWin.addEventListener("afterprint", handleAfterPrint);
-    
-    iframeWin.focus();
-    iframeWin.print();
-  }
+      }
+    }, 800);
+  });
 </script>
 
 <div class="print-isolated-container">
-  <SlideIframe slidesHtml={appState.slidesHtml} onIframeLoad={handlePrintInit} />
+  <SlideCanvas data={slideData} mode="scroll" fit_mode="none" />
 </div>
 
 <style>

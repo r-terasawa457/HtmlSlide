@@ -42,10 +42,11 @@ export class PptxExportController {
 
       try {
         const pptxExportTemplate = await AssetProvider.resolveAssetContent(
-          "src/pptx_export.html",
+          "/src/pptx_export.html",
         );
-        const pptxExportScript =
-          await AssetProvider.resolveScriptTag("dist/pptxExport.js");
+        const pptxExportScript = await AssetProvider.resolveScriptTag(
+          "/src/scripts/pptxExport.ts",
+        );
 
         const pptxExportHtml = pptxExportTemplate.replace(
           "",
@@ -58,7 +59,7 @@ export class PptxExportController {
           const exportWin = iframe.contentWindow as any;
           if (exportWin && exportWin.startExport) {
             const slidesCss = await AssetProvider.resolveAssetContent(
-              "src/css/slide_root.css",
+              "/src/css/slide_root.css",
             );
             exportWin.startExport({
               slidesHtml,

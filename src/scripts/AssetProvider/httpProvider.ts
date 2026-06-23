@@ -16,7 +16,7 @@ export const httpProvider: IAssetProvider = {
   },
 
   async resolveThemeCss(name: string): Promise<string> {
-    return this.resolveAssetContent(`themes/${name}`);
+    return this.resolveAssetContent(`theme/${name}`);
   },
 
   /**
@@ -40,7 +40,8 @@ export const httpProvider: IAssetProvider = {
   },
 
   async resolveAssetContent(path: string): Promise<string> {
-    const response = await fetch("/" + path);
+    const normalizedPath = path.startsWith("/") ? path : "/" + path;
+    const response = await fetch(normalizedPath);
     if (!response.ok) {
       throw new Error(`Failed to fetch asset content: ${path}`);
     }
@@ -61,15 +62,17 @@ export const httpProvider: IAssetProvider = {
 
     doc.querySelectorAll("script[src]").forEach((el) => {
       const src = el.getAttribute("src") || "";
-      if (!src.startsWith("http") && !src.startsWith("/")) {
-        el.setAttribute("src", `${origin}/${src}`);
+      if (!src.startsWith("http")) {
+        const path = src.startsWith("/") ? src : `/${src}`;
+        el.setAttribute("src", `${origin}${path}`);
       }
     });
 
     doc.querySelectorAll("link[rel='stylesheet'][href]").forEach((el) => {
       const href = el.getAttribute("href") || "";
-      if (!href.startsWith("http") && !href.startsWith("/")) {
-        el.setAttribute("href", `${origin}/${href}`);
+      if (!href.startsWith("http")) {
+        const path = href.startsWith("/") ? href : `/${href}`;
+        el.setAttribute("href", `${origin}${path}`);
       }
     });
 
