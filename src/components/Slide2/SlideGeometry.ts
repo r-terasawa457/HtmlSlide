@@ -13,8 +13,8 @@ export interface LaserInfo {
 export interface SlideGeometryContext {
   containerWidth: number;
   containerHeight: number;
-  slideWidth: number;
-  slideHeight: number;
+  pageWidth: number;
+  pageHeight: number;
   mode: "scroll" | "slide";
   fitMode: "contain" | "width" | "viewport" | "none";
   scrollbarMode: "auto" | "always" | "hidden";
@@ -22,77 +22,64 @@ export interface SlideGeometryContext {
   slideGap: number;
 }
 
+export interface SlideGeometryCalculated {
+  effectiveWidth: number;
+  scale: number;
+}
+
 /**
  * SlideCanvasにおけるすべての幾何計算・座標変換を行う静的関数集。
  */
 export class SlideGeometry {
   /**
-   * 隙間を加味した、拡縮適用前の等倍空間におけるスライド総高を算出する。
+   * fitModeとScrollbarModeとpropScaleに応じて、スケールと有効な表示内寸幅を算出する。
    */
-  static calculatePureTotalHeight(
+  static calculate(
     ctx: SlideGeometryContext,
-    pageCount: number,
-  ): number {
-    return ctx.mode === "scroll"
-      ? ctx.slideHeight * pageCount + ctx.slideGap * (pageCount - 1)
-      : ctx.slideHeight;
-  }
-
-  /**
-   * スクロールバーの出現を数学的に先回り予測し、有効な表示内寸幅を算出する。
-   */
-  static calculateEffectiveWidth(
-    ctx: SlideGeometryContext,
-    pureTotalHeight: number,
-  ): number {
-    if (ctx.scrollbarMode === "always") {
-      return Math.max(0, ctx.containerWidth - ctx.systemScrollbarWidth);
-    }
-    if (ctx.scrollbarMode === "hidden" || ctx.mode === "slide") {
-      return ctx.containerWidth;
-    }
-
-    const trialScaleX = ctx.containerWidth / (ctx.slideWidth || 1920);
-    const trialScale =
-      ctx.fitMode === "width"
-        ? trialScaleX
-        : Math.min(
-            trialScaleX,
-            ctx.containerHeight / (ctx.slideHeight || 1080),
-          );
-
-    if (pureTotalHeight * trialScale > ctx.containerHeight) {
-      return Math.max(0, ctx.containerWidth - ctx.systemScrollbarWidth);
-    }
-    return ctx.containerWidth;
-  }
-
-  /**
-   * フィットモードや外部ビューポート同期条件を網羅し、適用すべき最終スケール倍率を決定する。
-   */
-  static calculateCurrentScale(
-    ctx: SlideGeometryContext,
-    effectiveWidth: number,
+    contentHeight: number,
     propScale: number,
-    viewportInfo?: ViewportInfo,
-  ): number {
+  ): SlideGeometryCalculated {
+    // scaleの計算(fitMode: width, containは仮)
+    let scale = 0.0;
     if (ctx.fitMode === "none") {
-      return propScale;
-    }
-    if (ctx.fitMode === "viewport" && viewportInfo) {
-      return this.calculateTargetScrollForViewport(ctx, viewportInfo).scale;
-    }
-    if (ctx.slideWidth === 0 || ctx.slideHeight === 0) {
-      return 1.0;
+      scale = propScale;
+    } else if (ctx.fitMode === "viewport") {
+      scale = propScale; // viewPortからの計算はここでは行わない
+    } else if (ctx.pageWidth === 0 || ctx.pageHeight === 0) {
+      scale = 1.0;
+    } else if (ctx.fitMode === "width") {
+      scale = ctx.containerWidth / ctx.pageWidth;
+    } else if (ctx.fitMode === "contain") {
+      scale = Math.min(
+        ctx.containerWidth / ctx.pageWidth,
+        ctx.containerHeight / ctx.pageHeight,
+      );
     }
 
-    const scaleX = effectiveWidth / ctx.slideWidth;
+    // スクロールバー表示/非表示 -> effectriveWidth
+    let effectiveWidth = ctx.containerWidth;
+    if (
+      ctx.scrollbarMode === "always" ||
+      (contentHeight * scale > ctx.containerHeight &&
+        ctx.scrollbarMode !== "hidden")
+    ) {
+      effectiveWidth = Math.max(
+        0,
+        ctx.containerWidth - ctx.systemScrollbarWidth,
+      );
+    }
+
+    // fitMode: width, containの場合のスケール決定
     if (ctx.fitMode === "width") {
-      return scaleX;
+      scale = effectiveWidth / ctx.pageWidth;
+    } else if (ctx.fitMode === "contain") {
+      scale = Math.min(
+        effectiveWidth / ctx.pageWidth,
+        ctx.containerHeight / ctx.pageHeight,
+      );
     }
 
-    const scaleY = ctx.containerHeight / ctx.slideHeight;
-    return Math.min(scaleX, scaleY);
+    return { effectiveWidth: effectiveWidth, scale: scale };
   }
 
   /**
@@ -104,10 +91,10 @@ export class SlideGeometry {
     scale: number,
     shadowPaddingX: number,
   ): number {
-    if (ctx.mode !== "scroll" || scale <= 0 || ctx.slideWidth === 0) {
+    if (scale <= 0 || ctx.pageWidth === 0) {
       return 0;
     }
-    const availableSpaceX = (effectiveWidth - ctx.slideWidth * scale) / 2;
+    const availableSpaceX = (effectiveWidth - ctx.pageWidth * scale) / 2;
     if (availableSpaceX <= 0) {
       return 0;
     }
@@ -120,18 +107,17 @@ export class SlideGeometry {
   static calculateOffset(
     ctx: SlideGeometryContext,
     effectiveWidth: number,
-    totalInternalWidth: number,
-    totalInternalHeight: number,
-    scale: number,
+    scrollFillerWidth: number,
+    scrollFillerHeight: number,
   ): { x: number; y: number } {
     return {
       x:
-        effectiveWidth > totalInternalWidth * scale
-          ? (effectiveWidth - totalInternalWidth * scale) / 2
+        effectiveWidth > scrollFillerWidth
+          ? (effectiveWidth - scrollFillerWidth) / 2
           : 0,
       y:
-        ctx.containerHeight > totalInternalHeight * scale
-          ? (ctx.containerHeight - totalInternalHeight * scale) / 2
+        ctx.containerHeight > scrollFillerHeight
+          ? (ctx.containerHeight - scrollFillerHeight) / 2
           : 0,
     };
   }
@@ -192,7 +178,7 @@ export class SlideGeometry {
     scale: number,
   ): number {
     return (
-      (currentPaddingY + pageIndex * (ctx.slideHeight + ctx.slideGap)) * scale
+      (currentPaddingY + pageIndex * (ctx.pageHeight + ctx.slideGap)) * scale
     );
   }
 
