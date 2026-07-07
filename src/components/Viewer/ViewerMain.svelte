@@ -6,12 +6,12 @@
   import { getAppState } from "../../states/AppState.svelte";
   import { getViewerState } from "../../states/ViewerState.svelte";
   import ControlBar from "./ControlBar.svelte";
-  import SlideCanvas from "../Slide/SlideCanvas.svelte";
+  import SlideRenderer from "../slide3/SlideRenderer.svelte";
   import PresenterConsole from "./PresenterConsole.svelte";
 
   const appState = getAppState();
   const viewerState = getViewerState();
-  
+
   let isStageReady = $state(false);
 
   let fitMode = $derived.by<"contain" | "width" | "none">(() => {
@@ -24,7 +24,7 @@
         return "none";
     }
   });
-  
+
   function handleMessage(e: MessageEvent): void {
     if (e.data && e.data.type === "stage_ready") {
       isStageReady = true;
@@ -92,38 +92,15 @@
 </script>
 
 {#snippet sharedCanvas()}
-  <SlideCanvas
+  <SlideRenderer
     data={viewerState.slideData}
     mode={viewerState.currentMode === "SCROLL" ? "scroll" : "slide"}
-    fit_mode={fitMode}
-    bind:currentPageIndex={viewerState.currentPageIndex}
+    {fitMode}
+    scrollbarMode="auto"
+    bind:currentPage={viewerState.currentPageIndex}
     bind:scale={viewerState.currentZoom}
-    scrollTop={viewerState.currentMode === "SCROLL" ? viewerState.modeContexts.SCROLL.scrollTop * viewerState.currentZoom : 0}
-    scrollLeft={viewerState.currentMode === "SCROLL" ? viewerState.modeContexts.SCROLL.scrollLeft * viewerState.currentZoom : 0}
-    slideGap={viewerState.currentMode === "SCROLL" ? 10 : 0}
-    boxShadow={viewerState.currentMode === "SCROLL" ? '0 0 10px rgba(0, 0, 0, 0.3)' : 'none'}
-    
-    onscroll={(top, left, info) => {
-      if (viewerState.currentMode === "SCROLL") {
-        viewerState.updateScrollTop(top);
-        viewerState.updateScrollLeft(left);
-        // 等倍ビューポート情報の同期
-        if (info) {
-          viewerState.updateUnscaledViewport(
-            info.unscaledCenterTop,
-            info.unscaledCenterLeft,
-            info.unscaledWidth,
-            info.unscaledHeight
-          );
-        }
-      }
-    }}
-    
-    onkeydown={handleKeyDown}
-    bind:laserActive={viewerState.laserActive}
-    bind:laserX={viewerState.laserX}
-    bind:laserY={viewerState.laserY}
-    isPresenter={true}
+    laserPointerActive={viewerState.laserActive}
+    laserTrackingActive={viewerState.laserActive}
   />
 {/snippet}
 
@@ -131,7 +108,14 @@
   {#if viewerState.currentMode === "CONSOLE_PRES"}
     <PresenterConsole canvas={sharedCanvas} />
   {:else}
-    <div id="viewer-ui-wrapper" class="{viewerState.currentMode === 'STANDALONE_PRES' ? 'pres-layout' : 'normal-layout'} {viewerState.isMainFullscreen ? 'fullscreen-layout' : ''}">
+    <div
+      id="viewer-ui-wrapper"
+      class="{viewerState.currentMode === 'STANDALONE_PRES'
+        ? 'pres-layout'
+        : 'normal-layout'} {viewerState.isMainFullscreen
+        ? 'fullscreen-layout'
+        : ''}"
+    >
       <ControlBar />
       <div id="core-viewport">
         {@render sharedCanvas()}
@@ -141,9 +125,37 @@
 </div>
 
 <style>
-  #viewer-main-root { width: 100vw; height: 100vh; display: flex; flex-direction: column; overflow: hidden; background-color: #f5f5f5; }
-  #viewer-ui-wrapper { display: flex; flex-direction: column; width: 100%; height: 100%; position: relative; }
-  #core-viewport { flex: 1; width: 100%; height: 100%; position: relative; overflow: hidden; }
-  .pres-layout #core-viewport { background-color: #000; }
-  .fullscreen-layout #core-viewport { position: absolute; top: 0; left: 0; width: 100vw; height: 100vh; z-index: 1; }
+  #viewer-main-root {
+    width: 100vw;
+    height: 100vh;
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
+    background-color: #f5f5f5;
+  }
+  #viewer-ui-wrapper {
+    display: flex;
+    flex-direction: column;
+    width: 100%;
+    height: 100%;
+    position: relative;
+  }
+  #core-viewport {
+    flex: 1;
+    width: 100%;
+    height: 100%;
+    position: relative;
+    overflow: hidden;
+  }
+  .pres-layout #core-viewport {
+    background-color: #000;
+  }
+  .fullscreen-layout #core-viewport {
+    position: absolute;
+    top: 0;
+    left: 0;
+    width: 100vw;
+    height: 100vh;
+    z-index: 1;
+  }
 </style>
