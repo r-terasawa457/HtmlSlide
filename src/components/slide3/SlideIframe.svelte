@@ -13,8 +13,6 @@
     scale = $bindable(1.0),
     top,
     left,
-    scrollTop,
-    scrollLeft,
     onWheelDelta,
   }: {
     data: ParsedSlideData;
@@ -25,8 +23,6 @@
     scale?: number;
     top: number;
     left: number;
-    scrollTop: number;
-    scrollLeft: number;
     onWheelDelta?: (deltaX: number, deltaY: number) => void;
   } = $props();
 
@@ -38,6 +34,9 @@
   let iframeRef = $state<HTMLIFrameElement | null>(null);
 
   let iframeReady = $state(false);
+
+  let isScrolling = $state(false);
+  let scrollTimeoutId: number | null = null;
 
   function handleIframeLoad() {
     iframeReady = true;
@@ -55,20 +54,29 @@
     return () => unmount(slideDoc);
   });
 
-  /**
-   * iframeの内部で発生したスクロールイベント（wheel / touch）を
-   * 親要素（.scroll-container）に堅牢にリレーする
-   */
+  // スクロール状態のタイマー管理（デバウンス）
+  function activateScrollLock() {
+    isScrolling = true;
+    if (scrollTimeoutId) clearTimeout(scrollTimeoutId);
+
+    scrollTimeoutId = window.setTimeout(() => {
+      isScrolling = false;
+      scrollTimeoutId = null;
+    }, 150);
+  }
+
   function trackIframeScroll(iframeNode: HTMLIFrameElement) {
-    // 1. ハンドラがなければ何もせず、空のクリーンアップ関数を返す
     if (!onWheelDelta || !iframeReady) return () => {};
 
     const doc = iframeNode.contentDocument;
     const body = doc?.body;
-
     if (!body) return () => {};
 
+    // 2. ホイールイベントの処理
     const handleWheel = (e: WheelEvent) => {
+      activateScrollLock();
+
+      // 既存の親への通知を実行
       onWheelDelta(e.deltaX, e.deltaY);
     };
 
@@ -78,17 +86,19 @@
     const handleTouchStart = (e: TouchEvent) => {
       const touch = e.touches[0];
       if (touch) {
-        touchStartY = touch.clientY;
         touchStartX = touch.clientX;
+        touchStartY = touch.clientY;
       }
     };
 
     const handleTouchMove = (e: TouchEvent) => {
       const touch = e.touches[0];
       if (!touch) return;
+
       const deltaX = touchStartX - touch.clientX;
       const deltaY = touchStartY - touch.clientY;
 
+      activateScrollLock();
       onWheelDelta(deltaX, deltaY);
 
       touchStartX = touch.clientX;
@@ -103,6 +113,7 @@
       body.removeEventListener("wheel", handleWheel);
       body.removeEventListener("touchstart", handleTouchStart);
       body.removeEventListener("touchmove", handleTouchMove);
+      if (scrollTimeoutId) clearTimeout(scrollTimeoutId);
     };
   }
 </script>
@@ -113,11 +124,15 @@
   srcdoc={srcDoc}
   onload={handleIframeLoad}
   class="slide-canvas"
-  style="
-        width: {docWidth}px;
-        height: {docHeight}px;
-        transform: translate({left}px, {top}px) scale({scale});
-        transform-origin: top left;
-      "
+  style:width="{docWidth}px"
+  style:height="{docHeight}px"
+  style:transform="translate({left}px, {top}px) scale({scale})"
+  class:prevent-pointer-events={isScrolling}
   title="slide content"
 ></iframe>
+
+<style>
+  .slide-canvas {
+    transform-origin: top left;
+  }
+</style>

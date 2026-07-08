@@ -58,6 +58,8 @@
   style:height="{height}px"
   style:top="{top}px"
   style:left="{left}px"
+  class:prevent-pointer-events={!isMouseTracking}
+  class:hide-cursor={isMouseTracking}
 >
   <div
     class="laser-dot"
@@ -73,8 +75,13 @@
   .laser-pointer-overlay {
     position: absolute;
     z-index: 90;
-    pointer-events: none;
     background: transparent;
+  }
+  .prevent-pointer-events {
+    pointer-events: none;
+  }
+  .hide-cursor {
+    cursor: none !important;
   }
   .laser-dot {
     position: absolute;

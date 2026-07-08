@@ -73,6 +73,14 @@
 
   function handleScroll(e: Event) {
     const scroller = e.currentTarget as HTMLDivElement;
+
+    console.log(
+      scroller.clientWidth,
+      scroller.clientHeight,
+      scroller.offsetWidth,
+      scroller.offsetHeight,
+    );
+
     if (laserTrackingActive) {
       handlePointerMove(
         pointer.x - scrollLeft + scroller.scrollLeft,
@@ -84,20 +92,28 @@
   }
   function handleIframeScroll(deltaX: number, deltaY: number) {
     if (!scrollContainerRef) return;
-    let newScrollTop = scrollContainerRef.scrollTop + deltaY * _scale;
-    let newScrollLeft = scrollContainerRef.scrollLeft + deltaX * _scale;
+    let newScrollTop = scrollTop + deltaY * _scale;
+    let newScrollLeft = scrollLeft + deltaX * _scale;
+
     if (newScrollTop < 0) {
       newScrollTop = 0;
-    } else if (newScrollTop > docHeight * _scale - viewportHeight) {
-      newScrollTop = docHeight * _scale - viewportHeight;
+    } else if (
+      newScrollTop >
+      docHeight * _scale - viewportHeight + offsetY * 2
+    ) {
+      newScrollTop = docHeight * _scale - viewportHeight + offsetY * 2;
     }
+
     if (newScrollLeft < 0) {
       newScrollLeft = 0;
-    } else if (newScrollLeft > docWidth * _scale - viewportWidth) {
-      newScrollLeft = docWidth * _scale - viewportWidth;
+    } else if (
+      newScrollLeft >
+      docWidth * _scale - viewportWidth + offsetX * 2
+    ) {
+      newScrollLeft = docWidth * _scale - viewportWidth + offsetX * 2;
     }
-    scrollTop = newScrollTop;
-    scrollLeft = newScrollLeft;
+    // scrollTop = newScrollTop;
+    // scrollLeft = newScrollLeft;
     scrollContainerRef.scrollTo(newScrollLeft, newScrollTop);
   }
   function handlePointerMove(x: number, y: number) {
@@ -165,8 +181,6 @@
       {fitMode}
       {scrollbarMode}
       scale={_scale}
-      {scrollTop}
-      {scrollLeft}
       top={offsetY - scrollTop}
       left={offsetX - scrollLeft}
       onWheelDelta={handleIframeScroll}
