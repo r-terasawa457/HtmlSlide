@@ -3,7 +3,6 @@
    * @component LaserPointerOverlay
    * @description スライドに重ねた領域上でレーザーポインターのドットを描画する専用コンポーネント。
    */
-  import { createScrollController } from "./utils.svelte";
 
   let {
     width = 0,
@@ -24,7 +23,6 @@
     left?: number;
     isMouseTracking?: boolean;
     onPointerMove?: (x: number, y: number) => void;
-    onWheelDelta?: ((x: number, y: number) => void) | undefined;
   }>();
 
   function trackPointer(node: HTMLElement) {
@@ -52,15 +50,10 @@
       document.removeEventListener("pointermove", handleGlobalMove);
     };
   }
-
-  const scrollController = createScrollController((x: number, y: number) =>
-    onWheelDelta?.(x, y),
-  );
 </script>
 
 <div
   {@attach trackPointer}
-  {@attach scrollController.attach}
   class="laser-pointer-overlay"
   style:width="{width}px"
   style:height="{height}px"

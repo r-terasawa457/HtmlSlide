@@ -14,7 +14,7 @@
     scale = $bindable(1.0),
     top,
     left,
-    onWheelDelta,
+    scrollController, // 親から受け取る
   }: {
     data: ParsedSlideData;
     mode: string;
@@ -24,13 +24,55 @@
     scale?: number;
     top: number;
     left: number;
-    onWheelDelta?: (deltaX: number, deltaY: number) => void;
+    scrollController: ReturnType<typeof createScrollController>;
   } = $props();
 
   let viewportWidth = $state(1280);
   let viewportHeight = $state(720);
   let docWidth = $state(1280);
   let docHeight = $state(720 * 3);
+
+  let iframeWidth = $state(0);
+  let iframeHeight = $state(0);
+
+  let iframeScaleFlag = false;
+
+  // 3. _scale の連続変化を監視し、停止したタイミング（rAFベース）でサイズを微変動させて再描画を強制する
+  $effect(() => {
+    const currentScale = scale;
+    docWidth;
+    docHeight;
+
+    if (currentScale <= 1.0) {
+      iframeScaleFlag = false;
+      iframeWidth = docWidth;
+      iframeHeight = docHeight;
+      return;
+    }
+
+    let rafId: number;
+    const DEBOUNCE_MS = 150;
+    const startTime = performance.now();
+
+    function checkResolution(timestamp: number) {
+      const elapsed = timestamp - startTime;
+
+      if (elapsed >= DEBOUNCE_MS) {
+        // 拡大時（scale > 1.0）のみ、交互切り替えでボケをクリアにする
+        iframeScaleFlag = !iframeScaleFlag;
+        const miniScale = iframeScaleFlag ? 1.01 : 1.0;
+
+        iframeWidth = docWidth * miniScale;
+        iframeHeight = docHeight * miniScale;
+      } else {
+        rafId = requestAnimationFrame(checkResolution);
+      }
+    }
+
+    rafId = requestAnimationFrame(checkResolution);
+
+    return () => cancelAnimationFrame(rafId);
+  });
 
   let iframeRef = $state<HTMLIFrameElement | undefined>(undefined);
 
@@ -54,10 +96,6 @@
     });
     return () => unmount(slideDoc);
   });
-
-  const scrollController = createScrollController((x: number, y: number) =>
-    onWheelDelta?.(x, y),
-  );
 </script>
 
 <iframe
@@ -69,8 +107,8 @@
   srcdoc={srcDoc}
   onload={handleIframeLoad}
   class="slide-canvas"
-  style:width="{docWidth}px"
-  style:height="{docHeight}px"
+  style:width="{iframeWidth}px"
+  style:height="{iframeHeight}px"
   style:transform="translate({left}px, {top}px) scale({scale})"
   class:prevent-pointer-events={isScrolling}
   title="slide content"

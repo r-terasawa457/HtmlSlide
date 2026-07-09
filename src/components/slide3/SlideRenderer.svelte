@@ -65,14 +65,15 @@
   });
 
   let viewportWidth: number = $derived(
-    docHeight * _scale <= innerHeight ? containerWidth : innerWidth,
+    docHeight * _scale <= containerHeight ? containerWidth : innerWidth,
   );
   let viewportHeight: number = $derived(
-    docWidth * _scale <= innerWidth ? containerHeight : innerHeight,
+    docWidth * _scale <= containerWidth ? containerHeight : innerHeight,
   );
 
   $effect(() => {
-    if (fitMode in ["contain", "width"]) {
+    if (["contain", "width"].includes(fitMode)) {
+      console.log(_scale);
       if (scaleProp !== _scale) {
         scaleProp = _scale;
       }
@@ -147,6 +148,7 @@
 </script>
 
 <div
+  {@attach scrollController.attach}
   bind:this={wrapperRef}
   class="canvas-wrapper"
   style="
@@ -204,7 +206,6 @@
   </div>
 
   <div
-    {@attach scrollController.attach}
     class="sticky-viewport-container"
     style="
     width: {viewportWidth}px;
@@ -224,7 +225,7 @@
       scale={_scale}
       top={offsetY - scrollTop}
       left={offsetX - scrollLeft}
-      onWheelDelta={handleIframeScroll}
+      {scrollController}
     />
   </div>
 
@@ -237,6 +238,5 @@
     left={offsetX}
     isMouseTracking={laserTrackingActive}
     onPointerMove={handlePointerMove}
-    onWheelDelta={handleIframeScroll}
   />
 </div>

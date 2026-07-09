@@ -1,15 +1,14 @@
-// scrollController.ts
-import { onDestroy } from "svelte";
-
+/**
+ * スクロールおよびタッチジェスチャーによるスクロール量を一元管理するコントローラー
+ */
 export function createScrollController(
-  onScroll: ((deltaX: number, deltaY: number) => void) | undefined = undefined,
+  onScroll?: (deltaX: number, deltaY: number) => void,
 ) {
-  // Reactive state using Svelte 5 runes
   let isScrolling = $state(false);
   let scrollTimeoutId: number | null = null;
 
-  let touchStartY = 0;
   let touchStartX = 0;
+  let touchStartY = 0;
 
   function activateScrollLock() {
     isScrolling = true;
@@ -48,28 +47,41 @@ export function createScrollController(
     touchStartY = touch.clientY;
   };
 
-  // Ensure timeout is cleaned up if the whole controller is destroyed
-  onDestroy(() => {
-    if (scrollTimeoutId) clearTimeout(scrollTimeoutId);
-  });
-
-  // This is the functional action handler passed to {@attach}
-  function attach(target: HTMLElement | undefined) {
+  /**
+   * 対象の要素にイベントリスナーを紐付けます。
+   * 返却されるクリーンアップ関数を実行することで安全に解除されます。
+   */
+  function attach(target: HTMLElement | Document | null | undefined) {
     if (!onScroll || !target) return () => {};
 
-    target.addEventListener("wheel", handleWheel, { passive: true });
-    target.addEventListener("touchstart", handleTouchStart, { passive: true });
-    target.addEventListener("touchmove", handleTouchMove, { passive: true });
+    const options = { passive: true };
+    target.addEventListener("wheel", handleWheel as EventListener, options);
+    target.addEventListener(
+      "touchstart",
+      handleTouchStart as EventListener,
+      options,
+    );
+    target.addEventListener(
+      "touchmove",
+      handleTouchMove as EventListener,
+      options,
+    );
 
     return () => {
-      if (!target) return;
-      target.removeEventListener("wheel", handleWheel);
-      target.removeEventListener("touchstart", handleTouchStart);
-      target.removeEventListener("touchmove", handleTouchMove);
+      target.removeEventListener("wheel", handleWheel as EventListener);
+      target.removeEventListener(
+        "touchstart",
+        handleTouchStart as EventListener,
+      );
+      target.removeEventListener("touchmove", handleTouchMove as EventListener);
+
+      if (scrollTimeoutId) {
+        clearTimeout(scrollTimeoutId);
+        scrollTimeoutId = null;
+      }
     };
   }
 
-  // Expose the attach function and any reactive state you might need outside
   return {
     attach,
     get isScrolling() {
