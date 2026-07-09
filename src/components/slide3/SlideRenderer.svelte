@@ -1,6 +1,7 @@
 <script lang="ts">
   import SlideIframe from "./SlideIframe.svelte";
   import LaserPointerOverlay from "./LaserPointerOverlay.svelte";
+  import { createScrollController } from "./utils.svelte";
   import type { ParsedSlideData } from "./types";
 
   let {
@@ -12,6 +13,7 @@
     scale: scaleProp = $bindable(1.0),
     laserPointerActive = false,
     laserTrackingActive = false,
+    backgroundColor = "#F5F5F5",
   }: {
     data: ParsedSlideData;
     mode: string;
@@ -21,10 +23,14 @@
     scale?: number;
     laserPointerActive?: boolean;
     laserTrackingActive?: boolean;
+    backgroundColor?: string;
   } = $props();
 
-  let viewportWidth = $state(1280);
-  let viewportHeight = $state(720);
+  let containerWidth = $state(0);
+  let containerHeight = $state(0);
+  let innerWidth = $state(0);
+  let innerHeight = $state(0);
+
   let docWidth = $state(1280);
   let docHeight = $state(720 * 3);
   let currentPageHeight = $state(720);
@@ -36,17 +42,34 @@
       case "none":
         return scaleProp;
       case "contain":
-        return Math.min(
-          viewportWidth / docWidth,
-          viewportHeight / currentPageHeight,
-        );
+        const scalebyContainerWidth = containerWidth / docWidth;
+        const scalebyWidth =
+          docHeight * scalebyContainerWidth <= containerHeight
+            ? scalebyContainerWidth
+            : innerWidth / docWidth;
+        const scalebyContainerHeihgt = containerHeight / currentPageHeight;
+        const scalebyHeight =
+          docWidth * scalebyContainerHeihgt <= containerHeight
+            ? scalebyContainerHeihgt
+            : innerHeight / currentPageHeight;
+        return Math.min(scalebyWidth, scalebyHeight);
       case "width":
-        return viewportWidth / docWidth;
+        const scalebyContainer = containerWidth / docWidth;
+        return docHeight * scalebyContainer <= containerHeight
+          ? scalebyContainer
+          : innerWidth / docWidth;
       default:
         const _exhaustiveCheck: never = fitMode;
         return scaleProp;
     }
   });
+
+  let viewportWidth: number = $derived(
+    docHeight * _scale <= innerHeight ? containerWidth : innerWidth,
+  );
+  let viewportHeight: number = $derived(
+    docWidth * _scale <= innerWidth ? containerHeight : innerHeight,
+  );
 
   $effect(() => {
     if (fitMode in ["contain", "width"]) {
@@ -73,13 +96,6 @@
 
   function handleScroll(e: Event) {
     const scroller = e.currentTarget as HTMLDivElement;
-
-    console.log(
-      scroller.clientWidth,
-      scroller.clientHeight,
-      scroller.offsetWidth,
-      scroller.offsetHeight,
-    );
 
     if (laserTrackingActive) {
       handlePointerMove(
@@ -112,14 +128,22 @@
     ) {
       newScrollLeft = docWidth * _scale - viewportWidth + offsetX * 2;
     }
-    // scrollTop = newScrollTop;
-    // scrollLeft = newScrollLeft;
-    scrollContainerRef.scrollTo(newScrollLeft, newScrollTop);
+    scrollTop = newScrollTop;
+    scrollLeft = newScrollLeft;
+    scrollContainerRef.scrollTo({
+      left: newScrollLeft,
+      top: newScrollTop,
+      behavior: "instant",
+    });
   }
   function handlePointerMove(x: number, y: number) {
     pointer.x = x;
     pointer.y = y;
   }
+
+  const scrollController = createScrollController((x: number, y: number) =>
+    handleIframeScroll(x, y),
+  );
 </script>
 
 <div
@@ -136,13 +160,28 @@
   "
 >
   <div
+    class="size-monitor"
+    bind:offsetWidth={containerWidth}
+    bind:offsetHeight={containerHeight}
+    bind:clientWidth={innerWidth}
+    bind:clientHeight={innerHeight}
+    style="
+      width: 100%;
+      height: 100%;
+      position: absolute;
+      top: 0;
+      left: 0;
+      overflow-y: scroll;
+      overflow-x: scroll;
+      visibility: hidden;
+      "
+  ></div>
+  <div
     class="scroll-container"
     bind:this={scrollContainerRef}
     // class:hide-scrollbar={mode === 'scroll' && scrollbarMode === 'hidden'}
     // style:overflow-y={mode === 'slide' ? (fitMode === 'none' ? 'auto' : 'hidden') : (scrollbarMode === 'always' ? 'scroll' : 'auto')}
     // style:overflow-x={fitMode === 'none' ? 'auto' : 'hidden'}
-    bind:clientWidth={viewportWidth}
-    bind:clientHeight={viewportHeight}
     style="
       width: 100%;
       height: 100%;
@@ -165,10 +204,12 @@
   </div>
 
   <div
+    {@attach scrollController.attach}
     class="sticky-viewport-container"
     style="
     width: {viewportWidth}px;
     height: {viewportHeight}px;
+    background: {backgroundColor};
     position: absolute;
     top: 0;
     left: 0;
@@ -196,5 +237,6 @@
     left={offsetX}
     isMouseTracking={laserTrackingActive}
     onPointerMove={handlePointerMove}
+    onWheelDelta={handleIframeScroll}
   />
 </div>

@@ -2,6 +2,7 @@
   import { mount, unmount } from "svelte";
   import type { ParsedSlideData } from "./types";
   import SlideDocument from "./SlideDocument.svelte";
+  import { createScrollController } from "./utils.svelte";
   import srcDoc from "./slideiframe.html?raw";
 
   let {
@@ -31,7 +32,7 @@
   let docWidth = $state(1280);
   let docHeight = $state(720 * 3);
 
-  let iframeRef = $state<HTMLIFrameElement | null>(null);
+  let iframeRef = $state<HTMLIFrameElement | undefined>(undefined);
 
   let iframeReady = $state(false);
 
@@ -49,77 +50,21 @@
 
     const slideDoc = mount(SlideDocument, {
       target: doc.body,
-      props: { data: data },
+      props: { data: data, pages: "__all__" },
     });
     return () => unmount(slideDoc);
   });
 
-  // スクロール状態のタイマー管理（デバウンス）
-  function activateScrollLock() {
-    isScrolling = true;
-    if (scrollTimeoutId) clearTimeout(scrollTimeoutId);
-
-    scrollTimeoutId = window.setTimeout(() => {
-      isScrolling = false;
-      scrollTimeoutId = null;
-    }, 150);
-  }
-
-  function trackIframeScroll(iframeNode: HTMLIFrameElement) {
-    if (!onWheelDelta || !iframeReady) return () => {};
-
-    const doc = iframeNode.contentDocument;
-    const body = doc?.body;
-    if (!body) return () => {};
-
-    // 2. ホイールイベントの処理
-    const handleWheel = (e: WheelEvent) => {
-      activateScrollLock();
-
-      // 既存の親への通知を実行
-      onWheelDelta(e.deltaX, e.deltaY);
-    };
-
-    let touchStartY = 0;
-    let touchStartX = 0;
-
-    const handleTouchStart = (e: TouchEvent) => {
-      const touch = e.touches[0];
-      if (touch) {
-        touchStartX = touch.clientX;
-        touchStartY = touch.clientY;
-      }
-    };
-
-    const handleTouchMove = (e: TouchEvent) => {
-      const touch = e.touches[0];
-      if (!touch) return;
-
-      const deltaX = touchStartX - touch.clientX;
-      const deltaY = touchStartY - touch.clientY;
-
-      activateScrollLock();
-      onWheelDelta(deltaX, deltaY);
-
-      touchStartX = touch.clientX;
-      touchStartY = touch.clientY;
-    };
-
-    body.addEventListener("wheel", handleWheel, { passive: true });
-    body.addEventListener("touchstart", handleTouchStart, { passive: true });
-    body.addEventListener("touchmove", handleTouchMove, { passive: true });
-
-    return () => {
-      body.removeEventListener("wheel", handleWheel);
-      body.removeEventListener("touchstart", handleTouchStart);
-      body.removeEventListener("touchmove", handleTouchMove);
-      if (scrollTimeoutId) clearTimeout(scrollTimeoutId);
-    };
-  }
+  const scrollController = createScrollController((x: number, y: number) =>
+    onWheelDelta?.(x, y),
+  );
 </script>
 
 <iframe
-  {@attach trackIframeScroll}
+  {@attach (node) =>
+    scrollController.attach(
+      iframeReady ? node.contentDocument?.body : undefined,
+    )}
   bind:this={iframeRef}
   srcdoc={srcDoc}
   onload={handleIframeLoad}
@@ -134,5 +79,6 @@
 <style>
   .slide-canvas {
     transform-origin: top left;
+    will-change: transform;
   }
 </style>
