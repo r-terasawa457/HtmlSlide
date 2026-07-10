@@ -1,11 +1,17 @@
 <script lang="ts">
   import { onMount, onDestroy } from "svelte";
-  import { FileDropScanner, type ScannedFile } from "../scripts/FileDropScanner";
+  import {
+    FileDropScanner,
+    type ScannedFile,
+  } from "../scripts/FileDropScanner";
   import { SlidesEngine } from "../scripts/SlideEngine2";
   import { AssetProvider } from "../scripts/AssetProvider";
   import { getAppState } from "../states/AppState.svelte";
+  import { getSlideDataStore } from "./slide3/SlideStore.svelte";
+  import { slide } from "svelte/transition";
 
   const appState = getAppState();
+  const slideDataStore = getSlideDataStore();
   let dropZoneEl = $state<HTMLElement | null>(null);
   let scanner: FileDropScanner | null = null;
   let isDragover = $state(false);
@@ -14,7 +20,7 @@
     if (!dropZoneEl) return;
     scanner = new FileDropScanner({
       target: dropZoneEl,
-      hoverClass: "dragover", 
+      hoverClass: "dragover",
       onDrop: async (result) => {
         isDragover = false;
         const { files, isFallbackMode } = result;
@@ -22,8 +28,8 @@
         if (isFallbackMode && files.length === 1 && files[0]?.file.size === 0) {
           alert(
             "【ブラウザの制限による通知】\n" +
-            "ローカルファイル（file://）環境で実行されているため、ブラウザのセキュリティ制限によりフォルダ構造の直接解析に失敗しました。\n\n" +
-            "お手数ですが、フォルダを開いて中身のファイル群をすべて選択（Ctrl + A）し、それらをまとめてドロップしてください。",
+              "ローカルファイル（file://）環境で実行されているため、ブラウザのセキュリティ制限によりフォルダ構造の直接解析に失敗しました。\n\n" +
+              "お手数ですが、フォルダを開いて中身のファイル群をすべて選択（Ctrl + A）し、それらをまとめてドロップしてください。",
           );
           return;
         }
@@ -37,8 +43,12 @@
       },
     });
 
-    const handleDragEnter = () => { isDragover = true; };
-    const handleDragLeave = () => { isDragover = false; };
+    const handleDragEnter = () => {
+      isDragover = true;
+    };
+    const handleDragLeave = () => {
+      isDragover = false;
+    };
     dropZoneEl.addEventListener("dragenter", handleDragEnter);
     dropZoneEl.addEventListener("dragleave", handleDragLeave);
 
@@ -54,7 +64,9 @@
     if (scanner) scanner.destroy();
   });
 
-  async function processDroppedFiles(droppedFiles: ScannedFile[]): Promise<void> {
+  async function processDroppedFiles(
+    droppedFiles: ScannedFile[],
+  ): Promise<void> {
     const assetsMap: Record<string, string> = {};
     const duplicateFiles: string[] = [];
     let mdContent = "";
@@ -65,7 +77,9 @@
     if (mdDropped) {
       const lastSlash = mdDropped.relativePath.lastIndexOf("/");
       if (lastSlash >= 0) {
-        basePrefix = mdDropped.relativePath.substring(0, lastSlash + 1).toLowerCase();
+        basePrefix = mdDropped.relativePath
+          .substring(0, lastSlash + 1)
+          .toLowerCase();
       }
     }
 
@@ -116,12 +130,16 @@
     }
 
     if (duplicateFiles.length > 0) {
-      alert(`以下のファイル名または相対パスが重複しているため、処理を中断しました:\n${duplicateFiles.join("\n")}`);
+      alert(
+        `以下のファイル名または相対パスが重複しているため、処理を中断しました:\n${duplicateFiles.join("\n")}`,
+      );
       return;
     }
 
     if (!mdContent) {
-      alert("Markdownファイル(.md)が見つかりません。ファイルまたはフォルダ内のファイルをすべて選択してドロップしてください。");
+      alert(
+        "Markdownファイル(.md)が見つかりません。ファイルまたはフォルダ内のファイルをすべて選択してドロップしてください。",
+      );
       return;
     }
 
@@ -132,20 +150,22 @@
     };
 
     appState.title = result.title || mdTitle;
-    appState.slidesHtml = result.html;
+    slideDataStore.setSlideFromHtmlRawString(result.html);
     appState.assetsMap = assetsMap;
     appState.isLoaded = true;
   }
 </script>
 
-<div 
-  bind:this={dropZoneEl} 
+<div
+  bind:this={dropZoneEl}
   id="drop-zone"
-  class="fixed top-0 left-0 w-screen h-screen text-[#e8eaed] flex justify-center items-center border-4 border-dashed border-[#3c4043] m-0 box-border z-[9999] transition-colors duration-200
+  class="fixed top-0 left-0 w-screen h-screen text-[#e8eaed] flex justify-center items-center border-4 border-dashed border-[#3c4043] m-0 box-border z-9999 transition-colors duration-200
          {isDragover ? 'bg-[#2d2f34] border-[#8ab4f8]' : 'bg-[#202124]'}"
 >
   <div class="text-center pointer-events-none">
     <h3 class="text-2xl mb-2 font-bold">Markdownファイルをここにドロップ</h3>
-    <p class="text-[#9aa0a6] text-sm">file:// プロトコルによる完全スタンドアロン動作に対応しています</p>
+    <p class="text-[#9aa0a6] text-sm">
+      file:// プロトコルによる完全スタンドアロン動作に対応しています
+    </p>
   </div>
 </div>

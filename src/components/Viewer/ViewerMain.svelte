@@ -93,7 +93,6 @@
 
 {#snippet sharedCanvas()}
   <SlideRenderer
-    data={viewerState.slideData}
     mode={viewerState.currentMode === "SCROLL" ? "scroll" : "slide"}
     {fitMode}
     scrollbarMode="auto"

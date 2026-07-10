@@ -2,10 +2,11 @@
   import SlideIframe from "./SlideIframe.svelte";
   import LaserPointerOverlay from "./LaserPointerOverlay.svelte";
   import { createScrollController } from "./utils.svelte";
+  import { getSlideDataStore } from "./SlideStore.svelte";
   import type { ParsedSlideData } from "./types";
+  import { untrack } from "svelte";
 
   let {
-    data,
     mode,
     currentPage: currentPageProp = $bindable(0),
     fitMode,
@@ -15,7 +16,6 @@
     laserTrackingActive = false,
     backgroundColor = "#F5F5F5",
   }: {
-    data: ParsedSlideData;
     mode: string;
     currentPage?: number;
     fitMode: "none" | "contain" | "width";
@@ -26,14 +26,18 @@
     backgroundColor?: string;
   } = $props();
 
+  const slideDataStore = getSlideDataStore();
+
+  let docWidth = $derived(slideDataStore.slideMeta.totalSize?.width ?? 1280);
+  let docHeight = $derived(slideDataStore.slideMeta.totalSize?.height ?? 720);
+  let currentPageHeight = $derived(
+    slideDataStore.slideMeta.pageSizes[currentPageProp]?.height ?? 720,
+  );
+
   let containerWidth = $state(0);
   let containerHeight = $state(0);
   let innerWidth = $state(0);
   let innerHeight = $state(0);
-
-  let docWidth = $state(1280);
-  let docHeight = $state(720 * 3);
-  let currentPageHeight = $state(720);
 
   const pointer = $state({ x: -1, y: -1 });
 
@@ -73,7 +77,6 @@
 
   $effect(() => {
     if (["contain", "width"].includes(fitMode)) {
-      console.log(_scale);
       if (scaleProp !== _scale) {
         scaleProp = _scale;
       }
@@ -90,7 +93,38 @@
   let scrollTop = $state(0);
   let scrollLeft = $state(0);
 
-  let currentPage = $state(0);
+  $effect(() => {
+    const targetPage = currentPageProp;
+
+    const actualCurrentPage = untrack(() =>
+      slideDataStore.culculateCurrentPageIndex(
+        scrollTop,
+        viewportHeight / _scale,
+      ),
+    );
+
+    if (actualCurrentPage !== undefined && targetPage !== actualCurrentPage) {
+      const targetScrollTop = slideDataStore.calculateScrollTop(
+        targetPage,
+        viewportHeight / _scale,
+      );
+
+      if (targetScrollTop === undefined) {
+        currentPageProp = actualCurrentPage;
+        return;
+      }
+
+      const expectedPage = slideDataStore.culculateCurrentPageIndex(
+        targetScrollTop,
+        viewportHeight / _scale,
+      );
+      scrollTop = targetScrollTop;
+
+      if (expectedPage !== undefined && targetPage !== expectedPage) {
+        currentPageProp = expectedPage;
+      }
+    }
+  });
 
   let wrapperRef = $state<HTMLDivElement | null>(null);
   let scrollContainerRef = $state<HTMLDivElement | null>(null);
@@ -98,42 +132,55 @@
   function handleScroll(e: Event) {
     const scroller = e.currentTarget as HTMLDivElement;
 
+    const nextScrollTop = scroller.scrollTop / _scale;
+    const nextScrollLeft = scroller.scrollLeft / _scale;
+
     if (laserTrackingActive) {
       handlePointerMove(
-        pointer.x - scrollLeft + scroller.scrollLeft,
-        pointer.y - scrollTop + scroller.scrollTop,
+        pointer.x - scrollLeft + nextScrollLeft,
+        pointer.y - scrollTop + nextScrollTop,
       );
     }
-    scrollTop = scroller.scrollTop;
-    scrollLeft = scroller.scrollLeft;
+
+    scrollTop = nextScrollTop;
+    scrollLeft = nextScrollLeft;
+
+    const calculatedPage = slideDataStore.culculateCurrentPageIndex(
+      scrollTop,
+      viewportHeight / _scale,
+    );
+
+    if (calculatedPage !== undefined && currentPageProp !== calculatedPage) {
+      currentPageProp = calculatedPage;
+    }
   }
   function handleIframeScroll(deltaX: number, deltaY: number) {
     if (!scrollContainerRef) return;
-    let newScrollTop = scrollTop + deltaY * _scale;
-    let newScrollLeft = scrollLeft + deltaX * _scale;
+    let newScrollTop = scrollTop + deltaY / _scale;
+    let newScrollLeft = scrollLeft + deltaX / _scale;
 
     if (newScrollTop < 0) {
       newScrollTop = 0;
     } else if (
-      newScrollTop >
+      newScrollTop * _scale >
       docHeight * _scale - viewportHeight + offsetY * 2
     ) {
-      newScrollTop = docHeight * _scale - viewportHeight + offsetY * 2;
+      newScrollTop = docHeight - viewportHeight / _scale + offsetY * 2;
     }
 
     if (newScrollLeft < 0) {
       newScrollLeft = 0;
     } else if (
-      newScrollLeft >
+      newScrollLeft * _scale >
       docWidth * _scale - viewportWidth + offsetX * 2
     ) {
-      newScrollLeft = docWidth * _scale - viewportWidth + offsetX * 2;
+      newScrollLeft = docWidth - viewportWidth / _scale + offsetX * 2;
     }
     scrollTop = newScrollTop;
     scrollLeft = newScrollLeft;
     scrollContainerRef.scrollTo({
-      left: newScrollLeft,
-      top: newScrollTop,
+      left: newScrollLeft * _scale,
+      top: newScrollTop * _scale,
       behavior: "instant",
     });
   }
@@ -218,13 +265,10 @@
     "
   >
     <SlideIframe
-      {data}
       {mode}
-      {fitMode}
-      {scrollbarMode}
       scale={_scale}
-      top={offsetY - scrollTop}
-      left={offsetX - scrollLeft}
+      top={offsetY - scrollTop * _scale}
+      left={offsetX - scrollLeft * _scale}
       {scrollController}
     />
   </div>

@@ -6,29 +6,21 @@
   import srcDoc from "./slideiframe.html?raw";
 
   let {
-    data,
     mode,
     currentPage: currentPageProp = $bindable(),
-    fitMode,
-    scrollbarMode,
     scale = $bindable(1.0),
     top,
     left,
     scrollController, // 親から受け取る
   }: {
-    data: ParsedSlideData;
     mode: string;
     currentPage?: number;
-    fitMode: "none" | "contain" | "width";
-    scrollbarMode: string;
     scale?: number;
     top: number;
     left: number;
     scrollController: ReturnType<typeof createScrollController>;
   } = $props();
 
-  let viewportWidth = $state(1280);
-  let viewportHeight = $state(720);
   let docWidth = $state(1280);
   let docHeight = $state(720 * 3);
 
@@ -92,7 +84,7 @@
 
     const slideDoc = mount(SlideDocument, {
       target: doc.body,
-      props: { data: data, pages: "__all__" },
+      props: { pages: "__all__" },
     });
     return () => unmount(slideDoc);
   });

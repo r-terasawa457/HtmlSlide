@@ -1,6 +1,9 @@
 import { setContext, getContext } from "svelte";
 import { getAppState } from "./AppState.svelte";
-import type { ParsedSlideData } from "../components/Slide/types";
+import {
+  type SlideData,
+  getSlideDataStore,
+} from "../components/slide3/SlideStore.svelte";
 
 export type ViewMode = "SCROLL" | "STANDALONE_PRES" | "CONSOLE_PRES";
 export type ZoomMode = "ORIGINAL" | "CUSTOM" | "FIT_HEIGHT" | "FIT_WIDTH";
@@ -14,50 +17,6 @@ export interface ModeContext {
   unscaledCenterLeft: number;
   unscaledViewportWidth: number;
   unscaledViewportHeight: number;
-}
-
-/**
- * .slides を含む生HTML文字列を構造化された ParsedSlideData にパースします。
- */
-export function parseSlidesHtml(html: string): ParsedSlideData {
-  if (!html) {
-    return { containerAttrs: {}, commons: [], pages: [] };
-  }
-  const parser = new DOMParser();
-  const doc = parser.parseFromString(html, "text/html");
-  const slidesDiv = doc.querySelector(".slides");
-  if (!slidesDiv) {
-    return { containerAttrs: {}, commons: [], pages: [] };
-  }
-
-  const containerAttrs: Record<string, string> = {};
-  for (const attr of Array.from(slidesDiv.attributes)) {
-    containerAttrs[attr.name] = attr.value;
-  }
-
-  const commons: string[] = [];
-  const pages: string[] = [];
-
-  for (const child of Array.from(slidesDiv.childNodes)) {
-    if (child.nodeType === 1) {
-      const element = child as HTMLElement;
-      if (
-        element.tagName.toLowerCase() === "section" &&
-        element.classList.contains("page")
-      ) {
-        pages.push(element.outerHTML);
-      } else {
-        commons.push(element.outerHTML);
-      }
-    } else if (child.nodeType === 3) {
-      const text = child.textContent?.trim();
-      if (text) {
-        commons.push(text);
-      }
-    }
-  }
-
-  return { containerAttrs, commons, pages };
 }
 
 /**
@@ -123,13 +82,7 @@ export class ViewerState {
     source: "init",
   });
 
-  get slideData(): ParsedSlideData {
-    return parseSlidesHtml(this.appState.slidesHtml);
-  }
-
-  get totalPages(): number {
-    return this.slideData.pages.length;
-  }
+  slideDataStore = getSlideDataStore();
 
   currentPage = $derived(this.modeContexts[this.currentMode].currentPage);
 
@@ -139,7 +92,6 @@ export class ViewerState {
 
   set currentPageIndex(index: number) {
     const page = index + 1;
-    if (page < 1 || page > this.totalPages) return;
     if (this.modeContexts[this.currentMode].currentPage === page) return;
     this.modeContexts[this.currentMode].currentPage = page;
   }
@@ -155,7 +107,7 @@ export class ViewerState {
     renderMode: this.currentMode === "SCROLL" ? "SCROLL" : "SLIDE",
     currentPage: this.currentPage,
     currentZoom: this.currentZoom,
-    data: this.slideData,
+    data: this.slideDataStore.slideData,
     laserState: {
       active: this.laserActive,
       x: this.laserX,
@@ -170,7 +122,7 @@ export class ViewerState {
   });
 
   goToPage(page: number): void {
-    if (page < 1 || page > this.totalPages) return;
+    // if (page < 1 || page > this.totalPages) return;
     this.modeContexts[this.currentMode].currentPage = page;
     this.navigationSignal = { page, source: "program" };
   }
@@ -180,7 +132,8 @@ export class ViewerState {
   }
 
   updatePageFromScroll(page: number): void {
-    if (page < 1 || page > this.totalPages) return;
+    if (page < 1 || page > (this.slideDataStore.slideMeta.pageLength ?? 0))
+      return;
     if (this.modeContexts[this.currentMode].currentPage === page) return;
     this.modeContexts[this.currentMode].currentPage = page;
     this.navigationSignal = { page, source: "scroll" };

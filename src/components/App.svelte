@@ -9,8 +9,10 @@
   import PrintManager from "./Print/PrintManager.svelte";
   import { initAppState } from "../states/AppState.svelte";
   import { initViewerState } from "../states/ViewerState.svelte";
+  import { initSlideDataStore } from "./slide3/SlideStore.svelte";
 
   const appState = initAppState();
+  initSlideDataStore();
   initViewerState();
 
   $effect(() => {
@@ -20,7 +22,10 @@
   });
 </script>
 
-<div id="viewer-ui" class="absolute top-0 left-0 w-full h-full flex flex-col bg-[#525659] text-white font-sans overflow-hidden select-none">
+<div
+  id="viewer-ui"
+  class="absolute top-0 left-0 w-full h-full flex flex-col bg-[#525659] text-white font-sans overflow-hidden select-none"
+>
   {#if !appState.isLoaded}
     <DropZone />
   {:else}

@@ -1,20 +1,25 @@
 <script lang="ts">
   import { onMount, tick } from "svelte";
   import { getAppState } from "../../states/AppState.svelte";
-  import { parseSlidesHtml } from "../../states/ViewerState.svelte";
+  import {
+    type SlideData,
+    getSlideDataStore,
+  } from "../slide3/SlideStore.svelte";
   import SlideCanvas from "../Slide/SlideCanvas.svelte";
 
   const appState = getAppState();
-  const slideData = $derived(parseSlidesHtml(appState.slidesHtml));
+  const slideDataStore = getSlideDataStore();
 
   onMount(async () => {
     await tick();
     // SlideCanvas が iframe をロードし描画するのを少し待ってから印刷を実行
     setTimeout(() => {
-      const iframe = document.querySelector(".print-isolated-container iframe") as HTMLIFrameElement | null;
+      const iframe = document.querySelector(
+        ".print-isolated-container iframe",
+      ) as HTMLIFrameElement | null;
       if (iframe && iframe.contentWindow) {
         const iframeWin = iframe.contentWindow;
-        
+
         const handleAfterPrint = () => {
           iframeWin.removeEventListener("afterprint", handleAfterPrint);
           appState.clearPrintRequest();
@@ -32,7 +37,11 @@
 </script>
 
 <div class="print-isolated-container">
-  <SlideCanvas data={slideData} mode="scroll" fit_mode="none" />
+  <SlideCanvas
+    data={{ ...slideDataStore.slideData, ...slideDataStore.slideMeta }}
+    mode="scroll"
+    fit_mode="none"
+  />
 </div>
 
 <style>
