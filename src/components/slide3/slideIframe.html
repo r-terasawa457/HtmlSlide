@@ -6,9 +6,30 @@
         margin: 0;
         padding: 0;
         overflow: hidden;
+        background: transparent;
       }
-      section.page.is-hidden {
-        display: none !important;
+
+      @media print {
+        * {
+          box-shadow: none;
+          text-shadow: none;
+        }
+        html,
+        body {
+          background: #fff;
+        }
+        @page {
+          size: 960pt 540pt;
+          margin: 0;
+        }
+        section.page {
+          page-break-after: always;
+          break-after: page;
+          page-break-inside: avoid;
+          break-inside: avoid;
+          print-color-adjust: exact;
+          -webkit-print-color-adjust: exact;
+        }
       }
     </style>
   </head>

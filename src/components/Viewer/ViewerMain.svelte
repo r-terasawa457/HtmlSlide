@@ -93,9 +93,8 @@
 
 {#snippet sharedCanvas()}
   <SlideRenderer
-    mode={viewerState.currentMode === "SCROLL" ? "scroll" : "slide"}
+    pages={viewerState.currentMode === "SCROLL" ? "__all__" : "__currentPage__"}
     {fitMode}
-    scrollbarMode="auto"
     bind:currentPage={viewerState.currentPageIndex}
     bind:scale={viewerState.currentZoom}
     laserPointerActive={viewerState.laserActive}

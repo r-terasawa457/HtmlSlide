@@ -183,16 +183,73 @@ class SlideDataStore {
   }
 
   /**
+   * 表示対象のページ（renderPages）のみが gap を挟んで縦一列に並んでいると仮定した場合の、
+   * 全体のトータルサイズ（最大幅と合計高さ）を計算します。
+   *
+   * @param renderPages レンダリング対象のページインデックスの配列、またはすべてを対象とする場合は "__all__"
+   * @param gap ページ間の隙間（ピクセル数）
+   * @returns 計算されたトータルサイズ（width と height）。表示対象のページが存在しない、または計算できない場合は undefined
+   */
+  calculateTotalSize(
+    renderPages: number[] | "__all__" | undefined = "__all__",
+    gap: number = 0,
+  ): PageSize | undefined {
+    const pages = this._slideMeta.pageSizesPredicted;
+    if (!pages || pages.length === 0) return undefined;
+
+    const renderSet = renderPages !== "__all__" ? new Set(renderPages) : null;
+
+    let maxWidth = 0;
+    let totalHeight = 0;
+    let isFirstRenderedPage = true;
+    let hasRenderedPage = false;
+
+    for (let i = 0; i < pages.length; i++) {
+      if (renderSet && !renderSet.has(i)) {
+        continue;
+      }
+
+      const page = pages[i];
+      if (page === undefined) {
+        continue;
+      }
+
+      if (!isFirstRenderedPage) {
+        totalHeight += gap;
+      }
+      isFirstRenderedPage = false;
+      hasRenderedPage = true;
+
+      totalHeight += page.height;
+      maxWidth = Math.max(maxWidth, page.width);
+    }
+
+    if (!hasRenderedPage) {
+      return undefined;
+    }
+
+    return {
+      width: maxWidth,
+      height: totalHeight,
+    };
+  }
+
+  /**
    * 現在のスクロール位置とビューポートの高さから、アクティブなページ番号（0開始）を判定します。
    * 画面内での表示面積（縦方向のピクセル数）が最も大きいページを現在のページとみなします。
+   * レンダリング対象のページ（renderPages）のみが gap を挟んで縦一列に並んでいるものとして計算します。
    *
    * @param scrollTop 現在のスクロールコンテナのトップ位置
    * @param viewportHeight (スケール1.0換算)ビューポート（表示領域）の高さ
-   * @returns 現在のページインデックス（0 〜 ページ数-1）。判定できない場合は undefind
+   * @param renderPages レンダリング対象のページインデックスの配列、またはすべてを対象とする場合は "__all__"
+   * @param gap ページ間の隙間（ピクセル数）
+   * @returns 現在のページインデックス（0 〜 ページ数-1）。判定できない場合は undefined
    */
-  culculateCurrentPageIndex(
+  calculateCurrentPageIndex(
     scrollTop: number,
     viewportHeight: number,
+    renderPages: number[] | "__all__" | undefined = "__all__",
+    gap: number = 0,
   ): number | undefined {
     const pages = this._slideMeta.pageSizesPredicted;
     if (!pages || pages.length === 0) return undefined;
@@ -201,68 +258,104 @@ class SlideDataStore {
     let activeIndex: number | undefined = undefined;
     let accumulatedTop = 0;
 
+    const renderSet = renderPages !== "__all__" ? new Set(renderPages) : null;
+    let isFirstRenderedPage = true;
+
     for (let i = 0; i < pages.length; i++) {
+      if (renderSet && !renderSet.has(i)) {
+        continue;
+      }
+
       const page = pages[i];
       if (page === undefined) {
         continue;
       }
+
+      if (!isFirstRenderedPage) {
+        accumulatedTop += gap;
+      }
+      isFirstRenderedPage = false;
+
       const pageHeight = page.height;
       const pageTop = accumulatedTop;
       const pageBottom = pageTop + pageHeight;
 
-      // 1. ビューポートとページが重なっている領域（交差部分）の開始位置と終了位置を計算
       const intersectionStart = Math.max(scrollTop, pageTop);
       const intersectionEnd = Math.min(scrollTop + viewportHeight, pageBottom);
-
-      // 2. 重なっている縦幅（ピクセル数）を計算
       const visibleHeight = Math.max(0, intersectionEnd - intersectionStart);
 
-      // 3. 最も多く画面に表示されているページを更新
       if (visibleHeight > maxVisibleHeight) {
         maxVisibleHeight = visibleHeight;
         activeIndex = i;
       }
 
-      // 次のページのトップ位置を更新
       accumulatedTop += pageHeight;
     }
 
     return activeIndex;
   }
+
   /**
    * 指定されたページがビューポートの最上部に表示されるための scrollTop 位置を計算します。
+   * レンダリング対象のページ（renderPages）のみが gap を挟んで縦一列に並んでいるものとして計算します。
    *
    * @param pageIndex 対象のページインデックス（0 〜 ページ数-1）
+   * @param viewportHeight (スケール1.0換算)ビューポート（表示領域）の高さ
+   * @param renderPages レンダリング対象のページインデックスの配列、またはすべてを対象とする場合は "__all__"
+   * @param gap ページ間の隙間（ピクセル数）
    * @returns ターゲットとなる scrollTop のピクセル位置。計算できない場合は undefined
    */
   calculateScrollTop(
     pageIndex: number,
     viewportHeight: number,
+    renderPages: number[] | "__all__" | undefined = "__all__",
+    gap: number = 0,
   ): number | undefined {
     const pages = this._slideMeta.pageSizesPredicted;
-    const totalSize = this._slideMeta.totalSize;
-
     if (
       !pages ||
       pages.length === 0 ||
-      !totalSize ||
       pageIndex < 0 ||
       pageIndex >= pages.length
     ) {
       return undefined;
     }
 
-    let targetScrollTop = 0;
+    const renderSet = renderPages !== "__all__" ? new Set(renderPages) : null;
 
-    // 1. 指定されたページの直前までの高さをすべて足し合わせる
-    for (let i = 0; i < pageIndex; i++) {
+    if (renderSet && !renderSet.has(pageIndex)) {
+      return undefined;
+    }
+
+    let targetScrollTop = 0;
+    let displayedTotalHeight = 0;
+    let isFirstRenderedPage = true;
+
+    for (let i = 0; i < pages.length; i++) {
+      if (renderSet && !renderSet.has(i)) {
+        continue;
+      }
+
       const page = pages[i];
       if (page === undefined) {
         continue;
       }
-      targetScrollTop += page.height;
+
+      if (!isFirstRenderedPage) {
+        if (i <= pageIndex) {
+          targetScrollTop += gap;
+        }
+        displayedTotalHeight += gap;
+      }
+      isFirstRenderedPage = false;
+
+      if (i < pageIndex) {
+        targetScrollTop += page.height;
+      }
+      displayedTotalHeight += page.height;
     }
-    const maxScrollTop = Math.max(0, totalSize.height - viewportHeight);
+
+    const maxScrollTop = Math.max(0, displayedTotalHeight - viewportHeight);
 
     return Math.min(targetScrollTop, maxScrollTop);
   }

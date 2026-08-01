@@ -13,7 +13,6 @@
     left = 0,
     isMouseTracking = false,
     onPointerMove,
-    onWheelDelta = undefined,
   } = $props<{
     width: number;
     height: number;

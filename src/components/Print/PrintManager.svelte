@@ -1,11 +1,12 @@
 <script lang="ts">
   import { onMount, tick } from "svelte";
   import { getAppState } from "../../states/AppState.svelte";
+  import SlideCanvas from "../slide3/SlideCanvas.svelte";
+
   import {
     type SlideData,
     getSlideDataStore,
   } from "../slide3/SlideStore.svelte";
-  import SlideCanvas from "../Slide/SlideCanvas.svelte";
 
   const appState = getAppState();
   const slideDataStore = getSlideDataStore();
@@ -37,11 +38,7 @@
 </script>
 
 <div class="print-isolated-container">
-  <SlideCanvas
-    data={{ ...slideDataStore.slideData, ...slideDataStore.slideMeta }}
-    mode="scroll"
-    fit_mode="none"
-  />
+  <SlideCanvas width="fit-content" height="fit-content" />
 </div>
 
 <style>
